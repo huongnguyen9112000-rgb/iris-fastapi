@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-app = FastAPI(title="Iris AI Glassmorphism Platform")
+app = FastAPI(title="Iris AI Card Interactive Platform")
 
 # Load mô hình SVM
 model = joblib.load("svm_model.pkl")
@@ -23,146 +23,191 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Iris Classification AI Lab</title>
+        <title>Iris AI Smart Studio</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
         <style>
-            * { font-family: 'Plus Jakarta Sans', sans-serif; }
+            * { font-family: 'Outfit', sans-serif; }
             body {
-                background: radial-gradient(circle at top left, #1e1e38, #0d0e15);
+                background: #0f172a;
+                color: #f8fafc;
                 min-height: 100vh;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #e2e8f0;
-                overflow-x: hidden;
+                padding: 20px;
             }
-            .glass-card {
-                background: rgba(255, 255, 255, 0.04);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 24px;
-                padding: 2.5rem;
-                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
-                position: relative;
+            .main-card {
+                background: #1e293b;
+                border-radius: 28px;
+                padding: 30px;
+                width: 100%;
+                max-width: 520px;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                border: 1px solid #334155;
             }
-            .glass-card::before {
-                content: '';
-                position: absolute;
-                top: -2px; left: -2px; right: -2px; bottom: -2px;
-                background: linear-gradient(45deg, #a855f7, #3b82f6, transparent);
-                border-radius: 26px;
-                z-index: -1;
-                opacity: 0.3;
+            .stat-card {
+                background: #0f172a;
+                border: 1px solid #334155;
+                border-radius: 18px;
+                padding: 16px;
+                text-align: center;
             }
-            .badge-neon {
-                background: rgba(168, 85, 247, 0.15);
-                color: #c084fc;
-                border: 1px solid rgba(168, 85, 247, 0.3);
-                padding: 6px 16px;
-                border-radius: 20px;
-                font-size: 0.8rem;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-                font-weight: 700;
+            .btn-step {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: none;
+                background: #334155;
+                color: white;
+                font-weight: bold;
+                font-size: 16px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
             }
-            .form-range::-webkit-slider-thumb {
-                background: #c084fc;
-                box-shadow: 0 0 10px #c084fc;
+            .btn-step:hover { background: #6366f1; }
+            .preset-chip {
+                background: #334155;
+                border: 1px solid #475569;
+                color: #cbd5e1;
+                padding: 8px 14px;
+                border-radius: 12px;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: all 0.2s;
             }
-            .btn-cyber {
-                background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+            .preset-chip:hover {
+                background: #6366f1;
+                color: white;
+                border-color: #6366f1;
+            }
+            .btn-predict {
+                background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
                 border: none;
                 color: white;
-                font-weight: 700;
-                border-radius: 14px;
-                padding: 14px;
-                letter-spacing: 0.5px;
-                transition: all 0.3s ease;
-                box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3);
-            }
-            .btn-cyber:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 15px 30px rgba(139, 92, 246, 0.5);
-                color: white;
-            }
-            .result-card {
-                display: none;
-                margin-top: 1.5rem;
-                padding: 1.25rem;
+                font-weight: 800;
                 border-radius: 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                text-align: center;
-                animation: fadeIn 0.5s ease-out forwards;
+                padding: 16px;
+                font-size: 1.1rem;
+                letter-spacing: 0.5px;
+                width: 100%;
+                box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+                transition: transform 0.2s;
             }
-            @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(10px); }
-                to { opacity: 1; transform: translateY(0); }
+            .btn-predict:active { transform: scale(0.98); }
+            .result-overlay {
+                display: none;
+                margin-top: 20px;
+                padding: 20px;
+                border-radius: 20px;
+                background: radial-gradient(circle at center, #312e81, #1e1b4b);
+                border: 1px solid #6366f1;
+                text-align: center;
             }
         </style>
     </head>
     <body>
-        <div class="container" style="max-width: 480px;">
-            <div class="glass-card">
-                <div class="text-center mb-4">
-                    <span class="badge-neon mb-2 d-inline-block">SVM Intelligence Engine</span>
-                    <h2 class="fw-extrabold text-white mt-2">Iris AI Predictor</h2>
-                    <p class="text-secondary small">Hệ thống phân loại đa chiều thông số hoa Iris</p>
+        <div class="main-card">
+            <div class="text-center mb-4">
+                <span class="badge bg-indigo-500 text-indigo-200 mb-2 px-3 py-1 rounded-pill" style="background:#312e81; color:#a5b4fc;">Interactive AI Predictor</span>
+                <h3 class="fw-bold m-0">Iris Flower Classifier</h3>
+            </div>
+
+            <!-- Preset Fast Options -->
+            <div class="mb-4">
+                <p class="small text-muted mb-2 fw-semibold">⚡ Chọn nhanh bộ mẫu thử:</p>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="preset-chip" onclick="setValues(5.1, 3.5, 1.4, 0.2)">Mẫu Setosa</span>
+                    <span class="preset-chip" onclick="setValues(6.0, 2.9, 4.5, 1.5)">Mẫu Versicolor</span>
+                    <span class="preset-chip" onclick="setValues(6.9, 3.1, 5.4, 2.1)">Mẫu Virginica</span>
+                </div>
+            </div>
+
+            <!-- Step Control Grid -->
+            <div class="row g-3 mb-4">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="small text-muted mb-1">Sepal Length</div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <button class="btn-step" onclick="adjust('sl', -0.1)">-</button>
+                            <span id="sl_val" class="fw-bold fs-5 text-indigo-400">5.1</span>
+                            <button class="btn-step" onclick="adjust('sl', 0.1)">+</button>
+                        </div>
+                    </div>
                 </div>
 
-                <form id="irisForm">
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="text-light">Sepal Length</span>
-                            <span id="v1" class="text-info fw-bold">5.1 cm</span>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="small text-muted mb-1">Sepal Width</div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <button class="btn-step" onclick="adjust('sw', -0.1)">-</button>
+                            <span id="sw_val" class="fw-bold fs-5 text-indigo-400">3.5</span>
+                            <button class="btn-step" onclick="adjust('sw', 0.1)">+</button>
                         </div>
-                        <input type="range" class="form-range" id="sepal_length" min="4.0" max="8.0" step="0.1" value="5.1" oninput="v1.innerText=this.value+' cm'">
                     </div>
-
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="text-light">Sepal Width</span>
-                            <span id="v2" class="text-info fw-bold">3.5 cm</span>
-                        </div>
-                        <input type="range" class="form-range" id="sepal_width" min="2.0" max="4.5" step="0.1" value="3.5" oninput="v2.innerText=this.value+' cm'">
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="text-light">Petal Length</span>
-                            <span id="v3" class="text-info fw-bold">1.4 cm</span>
-                        </div>
-                        <input type="range" class="form-range" id="petal_length" min="1.0" max="7.0" step="0.1" value="1.4" oninput="v3.innerText=this.value+' cm'">
-                    </div>
-
-                    <div class="mb-4">
-                        <div class="d-flex justify-content-between small mb-1">
-                            <span class="text-light">Petal Width</span>
-                            <span id="v4" class="text-info fw-bold">0.2 cm</span>
-                        </div>
-                        <input type="range" class="form-range" id="petal_width" min="0.1" max="2.5" step="0.1" value="0.2" oninput="v4.innerText=this.value+' cm'">
-                    </div>
-
-                    <button type="submit" class="btn btn-cyber w-100">RUN PREDICTION ⚡</button>
-                </form>
-
-                <div id="result" class="result-card">
-                    <div class="text-secondary small text-uppercase mb-1">Predicted Class</div>
-                    <h3 id="predText" class="fw-bold m-0 text-capitalize" style="color: #38bdf8;">---</h3>
                 </div>
+
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="small text-muted mb-1">Petal Length</div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <button class="btn-step" onclick="adjust('pl', -0.1)">-</button>
+                            <span id="pl_val" class="fw-bold fs-5 text-indigo-400">1.4</span>
+                            <button class="btn-step" onclick="adjust('pl', 0.1)">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="small text-muted mb-1">Petal Width</div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <button class="btn-step" onclick="adjust('pw', -0.1)">-</button>
+                            <span id="pw_val" class="fw-bold fs-5 text-indigo-400">0.2</span>
+                            <button class="btn-step" onclick="adjust('pw', 0.1)">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-predict" onclick="runPrediction()">PHÂN LOẠI NGAY 🌸</button>
+
+            <div id="result" class="result-overlay">
+                <div class="text-uppercase small text-indigo-200 mb-1" style="letter-spacing: 1px;">KẾT QUẢ DỰ ĐOÁN</div>
+                <h2 id="predText" class="fw-extrabold text-warning m-0">---</h2>
             </div>
         </div>
 
         <script>
-            document.getElementById('irisForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
+            let store = { sl: 5.1, sw: 3.5, pl: 1.4, pw: 0.2 };
+
+            function updateUI() {
+                document.getElementById('sl_val').innerText = store.sl.toFixed(1);
+                document.getElementById('sw_val').innerText = store.sw.toFixed(1);
+                document.getElementById('pl_val').innerText = store.pl.toFixed(1);
+                document.getElementById('pw_val').innerText = store.pw.toFixed(1);
+            }
+
+            function adjust(key, delta) {
+                store[key] = Math.max(0.1, parseFloat((store[key] + delta).toFixed(1)));
+                updateUI();
+            }
+
+            function setValues(sl, sw, pl, pw) {
+                store = { sl, sw, pl, pw };
+                updateUI();
+                runPrediction();
+            }
+
+            async function runPrediction() {
                 const data = {
-                    sepal_length: parseFloat(document.getElementById('sepal_length').value),
-                    sepal_width: parseFloat(document.getElementById('sepal_width').value),
-                    petal_length: parseFloat(document.getElementById('petal_length').value),
-                    petal_width: parseFloat(document.getElementById('petal_width').value)
+                    sepal_length: store.sl,
+                    sepal_width: store.sw,
+                    petal_length: store.pl,
+                    petal_width: store.pw
                 };
 
                 const response = await fetch('/predict', {
@@ -172,16 +217,10 @@ def home():
                 });
                 
                 const result = await response.json();
-                const predElem = document.getElementById('predText');
-                predElem.innerText = result.prediction;
-
-                // Dynamic colors for predicted species
-                if (result.prediction === 'setosa') predElem.style.color = '#38bdf8'; // Cyan
-                else if (result.prediction === 'versicolor') predElem.style.color = '#c084fc'; // Purple
-                else predElem.style.color = '#f43f5e'; // Pink-Red
-
+                const resElem = document.getElementById('predText');
+                resElem.innerText = result.prediction.toUpperCase();
                 document.getElementById('result').style.display = 'block';
-            });
+            }
         </script>
     </body>
     </html>
