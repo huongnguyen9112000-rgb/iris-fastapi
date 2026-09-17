@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-app = FastAPI(title="Botanical Iris AI Studio Pro")
+app = FastAPI(title="Botanical Iris AI Studio Studio")
 
 # Load mô hình SVM
 model = joblib.load("svm_model.pkl")
@@ -44,6 +44,23 @@ def home():
                 color: var(--text-dark);
                 min-height: 100vh;
                 padding: 30px 15px;
+                position: relative;
+                overflow-x: hidden;
+            }
+
+            /* Falling Petals Background Effect */
+            .petal {
+                position: fixed;
+                top: -10%;
+                user-select: none;
+                pointer-events: none;
+                z-index: 0;
+                animation: fall linear infinite;
+            }
+
+            @keyframes fall {
+                0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(105vh) rotate(360deg); opacity: 0; }
             }
 
             .bloom-card {
@@ -53,6 +70,8 @@ def home():
                 border-radius: 28px;
                 padding: 26px;
                 box-shadow: 0 15px 35px rgba(244, 114, 182, 0.08);
+                position: relative;
+                z-index: 1;
             }
 
             .preset-btn {
@@ -119,8 +138,17 @@ def home():
                 background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 100%);
                 border: 2px dashed #f472b6;
                 border-radius: 24px;
-                padding: 20px;
+                padding: 15px;
                 text-align: center;
+            }
+
+            .flower-img-preview {
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 3px solid #f472b6;
+                box-shadow: 0 5px 15px rgba(244, 114, 182, 0.3);
             }
 
             .progress-pink {
@@ -133,11 +161,23 @@ def home():
                 background: linear-gradient(90deg, #f472b6, #c084fc);
                 border-radius: 10px;
             }
+
+            /* Hidden PDF Template */
+            #pdfTemplate {
+                display: none;
+                background: #ffffff;
+                padding: 30px;
+                color: #333;
+            }
         </style>
     </head>
     <body>
-        <div class="container-fluid" id="exportArea" style="max-width: 1250px;">
-            <div class="text-center mb-4">
+
+        <!-- Falling Petals Container -->
+        <div id="petalsContainer"></div>
+
+        <div class="container-fluid" style="max-width: 1250px;">
+            <div class="text-center mb-4 position-relative" style="z-index: 1;">
                 <span class="badge rounded-pill px-3 py-2 mb-2" style="background: #fce7f3; color: #be185d; font-weight: 600;">🌸 AI Botanical Classification Studio</span>
                 <h1 class="serif-title display-5 fw-bold text-dark m-0">Iris Flower Analytics</h1>
                 <p class="text-muted mt-1">Dự đoán và phân tích các loài hoa Iris bằng trí tuệ nhân tạo</p>
@@ -194,9 +234,12 @@ def home():
                         <div>
                             <h5 class="serif-title fw-bold mb-3 text-dark">3. Kết quả phân loại</h5>
                             
-                            <div class="result-display mb-3">
-                                <div class="small text-uppercase fw-bold text-muted mb-1">Kết Quả Dự Đoán</div>
-                                <h2 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h2>
+                            <div class="result-display mb-3 d-flex align-items-center justify-content-around">
+                                <div>
+                                    <div class="small text-uppercase fw-bold text-muted mb-1">DỰ ĐOÁN</div>
+                                    <h3 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h3>
+                                </div>
+                                <img id="flowerImg" src="https://images.unsplash.com/photo-1550583724-b2692b85b150?w=200&auto=format&fit=crop" class="flower-img-preview" alt="Iris Flower">
                             </div>
 
                             <!-- Confidence Score Gauge -->
@@ -218,7 +261,7 @@ def home():
                             </div>
                         </div>
 
-                        <button class="btn btn-outline-danger w-100 rounded-4 fw-bold py-2" onclick="downloadPDF()">📄 Tải Báo Cáo PDF</button>
+                        <button class="btn btn-outline-danger w-100 rounded-4 fw-bold py-2" onclick="downloadPDF()">📄 Tải Báo Cáo PDF Chuẩn</button>
                     </div>
                 </div>
             </div>
@@ -250,7 +293,72 @@ def home():
             </div>
         </div>
 
+        <!-- HIDDEN PDF REPORT TEMPLATE -->
+        <div id="pdfTemplate">
+            <div style="border: 2px solid #f472b6; border-radius: 20px; padding: 25px; font-family: 'Plus Jakarta Sans', sans-serif;">
+                <div style="text-align: center; border-bottom: 2px solid #fbcfe8; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h2 style="color: #be185d; font-family: 'Playfair Display', serif; margin: 0;">🌸 IRIS AI BOTANICAL REPORT</h2>
+                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Báo cáo kết quả phân loại loài hoa bằng trí tuệ nhân tạo</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; background: #faf5f8; padding: 15px; border-radius: 12px;">
+                    <div>
+                        <strong>Loài Hoa Dự Đoán:</strong> <span id="pdfSpecies" style="color: #be185d; font-size: 18px; font-weight: bold;">-</span><br>
+                        <strong>Độ Tin Cậy Model:</strong> <span id="pdfConfidence" style="color: #22c55e; font-weight: bold;">-</span>
+                    </div>
+                    <div style="text-align: right; font-size: 12px; color: #666;">
+                        <strong>Ngày xuất:</strong> <span id="pdfDate"></span><br>
+                        <strong>Thuật toán:</strong> SVM Classifier
+                    </div>
+                </div>
+
+                <h4 style="color: #a21caf; font-size: 14px; margin-bottom: 10px;">THÔNG SỐ ĐẦU VÀO:</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
+                    <tr style="background: #fdf2f8;">
+                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Sepal Length</th>
+                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Sepal Width</th>
+                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Petal Length</th>
+                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Petal Width</th>
+                    </tr>
+                    <tr style="text-align: center;">
+                        <td id="pdfSL" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
+                        <td id="pdfSW" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
+                        <td id="pdfPL" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
+                        <td id="pdfPW" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
+                    </tr>
+                </table>
+
+                <div style="text-align: center; margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px;">
+                    Được tạo tự động bởi Iris AI Studio Pro • Powered by FastAPI & Scikit-Learn
+                </div>
+            </div>
+        </div>
+
         <script>
+            // Hiệu ứng hoa rơi nền
+            function createPetals() {
+                const container = document.getElementById('petalsContainer');
+                const petalIcons = ['🌸', '🌺', '🪷', '✨'];
+                for (let i = 0; i < 15; i++) {
+                    const petal = document.createElement('div');
+                    petal.className = 'petal';
+                    petal.innerText = petalIcons[Math.floor(Math.random() * petalIcons.length)];
+                    petal.style.left = Math.random() * 100 + 'vw';
+                    petal.style.animationDuration = (Math.random() * 5 + 5) + 's';
+                    petal.style.fontSize = (Math.random() * 10 + 15) + 'px';
+                    petal.style.animationDelay = Math.random() * 5 + 's';
+                    container.appendChild(petal);
+                }
+            }
+            createPetals();
+
+            // Ảnh minh họa từng loài
+            const flowerImages = {
+                'SETOSA': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
+                'VERSICOLOR': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
+                'VIRGINICA': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
+            };
+
             const ctx = document.getElementById('radarCanvas').getContext('2d');
             const radarChart = new Chart(ctx, {
                 type: 'radar',
@@ -317,10 +425,14 @@ def home():
                 document.getElementById('confidenceVal').innerText = confidence + '%';
                 document.getElementById('confidenceBar').style.width = confidence + '%';
 
-                // Bắn pháo hoa cánh hoa
+                if (flowerImages[speciesName]) {
+                    document.getElementById('flowerImg').src = flowerImages[speciesName];
+                }
+
+                // Hiệu ứng pháo hoa hoa nở
                 confetti({
-                    particleCount: 50,
-                    spread: 60,
+                    particleCount: 60,
+                    spread: 70,
                     origin: { y: 0.7 },
                     colors: ['#f472b6', '#c084fc', '#fbcfe8']
                 });
@@ -360,15 +472,35 @@ def home():
             }
 
             function downloadPDF() {
-                const element = document.getElementById('exportArea');
+                const species = document.getElementById('targetClass').innerText;
+                if (species === 'SẴN SÀNG') {
+                    alert('Vui lòng thực hiện phân loại trước khi tải PDF!');
+                    return;
+                }
+
+                // Điền dữ liệu vào Template PDF riêng
+                document.getElementById('pdfSpecies').innerText = species;
+                document.getElementById('pdfConfidence').innerText = document.getElementById('confidenceVal').innerText;
+                document.getElementById('pdfDate').innerText = new Date().toLocaleDateString();
+                document.getElementById('pdfSL').innerText = document.getElementById('sl').value + ' cm';
+                document.getElementById('pdfSW').innerText = document.getElementById('sw').value + ' cm';
+                document.getElementById('pdfPL').innerText = document.getElementById('pl').value + ' cm';
+                document.getElementById('pdfPW').innerText = document.getElementById('pw').value + ' cm';
+
+                const element = document.getElementById('pdfTemplate');
+                element.style.display = 'block';
+
                 const opt = {
-                    margin:       0.3,
-                    filename:     'Iris_AI_Analysis_Report.pdf',
+                    margin:       0.5,
+                    filename:     `Iris_Report_${species}.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { scale: 2 },
-                    jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
                 };
-                html2pdf().set(opt).from(element).save();
+
+                html2pdf().set(opt).from(element).save().then(() => {
+                    element.style.display = 'none';
+                });
             }
         </script>
     </body>
@@ -380,7 +512,6 @@ def predict(data: IrisInput):
     input_data = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     prediction = model.predict(input_data)[0]
     
-    # Tính độ tin cậy (Probability score)
     confidence = 98.5
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(input_data)[0]
