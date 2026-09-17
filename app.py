@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-app = FastAPI(title="Botanical Iris AI Studio Studio")
+app = FastAPI(title="Botanical Iris AI Studio")
 
 # Load mô hình SVM
 model = joblib.load("svm_model.pkl")
@@ -28,7 +28,6 @@ def home():
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
         <style>
             :root {
                 --bg-soft: #fdf8f6;
@@ -161,19 +160,11 @@ def home():
                 background: linear-gradient(90deg, #f472b6, #c084fc);
                 border-radius: 10px;
             }
-
-            /* Hidden PDF Template */
-            #pdfTemplate {
-                display: none;
-                background: #ffffff;
-                padding: 30px;
-                color: #333;
-            }
         </style>
     </head>
     <body>
 
-        <!-- Falling Petals Container -->
+        <!-- Petals Falling Container -->
         <div id="petalsContainer"></div>
 
         <div class="container-fluid" style="max-width: 1250px;">
@@ -239,7 +230,7 @@ def home():
                                     <div class="small text-uppercase fw-bold text-muted mb-1">DỰ ĐOÁN</div>
                                     <h3 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h3>
                                 </div>
-                                <img id="flowerImg" src="https://images.unsplash.com/photo-1550583724-b2692b85b150?w=200&auto=format&fit=crop" class="flower-img-preview" alt="Iris Flower">
+                                <img id="flowerImg" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="flower-img-preview" alt="Iris Flower">
                             </div>
 
                             <!-- Confidence Score Gauge -->
@@ -261,7 +252,7 @@ def home():
                             </div>
                         </div>
 
-                        <button class="btn btn-outline-danger w-100 rounded-4 fw-bold py-2" onclick="downloadPDF()">📄 Tải Báo Cáo PDF Chuẩn</button>
+                        <button class="btn btn-outline-danger w-100 rounded-4 fw-bold py-2" onclick="exportPDFReport()">📄 Xuất Báo Cáo PDF Chuẩn</button>
                     </div>
                 </div>
             </div>
@@ -293,49 +284,8 @@ def home():
             </div>
         </div>
 
-        <!-- HIDDEN PDF REPORT TEMPLATE -->
-        <div id="pdfTemplate">
-            <div style="border: 2px solid #f472b6; border-radius: 20px; padding: 25px; font-family: 'Plus Jakarta Sans', sans-serif;">
-                <div style="text-align: center; border-bottom: 2px solid #fbcfe8; padding-bottom: 15px; margin-bottom: 20px;">
-                    <h2 style="color: #be185d; font-family: 'Playfair Display', serif; margin: 0;">🌸 IRIS AI BOTANICAL REPORT</h2>
-                    <p style="color: #666; font-size: 12px; margin-top: 5px;">Báo cáo kết quả phân loại loài hoa bằng trí tuệ nhân tạo</p>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; margin-bottom: 20px; background: #faf5f8; padding: 15px; border-radius: 12px;">
-                    <div>
-                        <strong>Loài Hoa Dự Đoán:</strong> <span id="pdfSpecies" style="color: #be185d; font-size: 18px; font-weight: bold;">-</span><br>
-                        <strong>Độ Tin Cậy Model:</strong> <span id="pdfConfidence" style="color: #22c55e; font-weight: bold;">-</span>
-                    </div>
-                    <div style="text-align: right; font-size: 12px; color: #666;">
-                        <strong>Ngày xuất:</strong> <span id="pdfDate"></span><br>
-                        <strong>Thuật toán:</strong> SVM Classifier
-                    </div>
-                </div>
-
-                <h4 style="color: #a21caf; font-size: 14px; margin-bottom: 10px;">THÔNG SỐ ĐẦU VÀO:</h4>
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
-                    <tr style="background: #fdf2f8;">
-                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Sepal Length</th>
-                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Sepal Width</th>
-                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Petal Length</th>
-                        <th style="padding: 8px; border: 1px solid #fbcfe8;">Petal Width</th>
-                    </tr>
-                    <tr style="text-align: center;">
-                        <td id="pdfSL" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
-                        <td id="pdfSW" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
-                        <td id="pdfPL" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
-                        <td id="pdfPW" style="padding: 8px; border: 1px solid #fbcfe8;">-</td>
-                    </tr>
-                </table>
-
-                <div style="text-align: center; margin-top: 30px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px;">
-                    Được tạo tự động bởi Iris AI Studio Pro • Powered by FastAPI & Scikit-Learn
-                </div>
-            </div>
-        </div>
-
         <script>
-            // Hiệu ứng hoa rơi nền
+            // Hiệu ứng hoa rơi
             function createPetals() {
                 const container = document.getElementById('petalsContainer');
                 const petalIcons = ['🌸', '🌺', '🪷', '✨'];
@@ -352,7 +302,7 @@ def home():
             }
             createPetals();
 
-            // Ảnh minh họa từng loài
+            // Ảnh minh họa từng loài hoa
             const flowerImages = {
                 'SETOSA': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
                 'VERSICOLOR': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
@@ -420,7 +370,6 @@ def home():
                 const speciesName = result.prediction.toUpperCase();
                 const confidence = result.confidence;
 
-                // Cập nhật UI
                 document.getElementById('targetClass').innerText = speciesName;
                 document.getElementById('confidenceVal').innerText = confidence + '%';
                 document.getElementById('confidenceBar').style.width = confidence + '%';
@@ -429,20 +378,17 @@ def home():
                     document.getElementById('flowerImg').src = flowerImages[speciesName];
                 }
 
-                // Hiệu ứng pháo hoa hoa nở
                 confetti({
-                    particleCount: 60,
-                    spread: 70,
+                    particleCount: 50,
+                    spread: 60,
                     origin: { y: 0.7 },
                     colors: ['#f472b6', '#c084fc', '#fbcfe8']
                 });
 
-                // Đọc giọng nói
                 if (document.getElementById('voiceToggle').checked) {
                     speakResult("Predicted species is " + speciesName);
                 }
 
-                // Cập nhật lịch sử
                 addHistory(sl, sw, pl, pw, speciesName, confidence);
             }
 
@@ -471,36 +417,96 @@ def home():
                 `).join('');
             }
 
-            function downloadPDF() {
+            // HÀM XUẤT PDF CHUẨN ĐÚNG 1 TRANG KHÔNG LỖI MARGIN
+            function exportPDFReport() {
                 const species = document.getElementById('targetClass').innerText;
                 if (species === 'SẴN SÀNG') {
-                    alert('Vui lòng thực hiện phân loại trước khi tải PDF!');
+                    alert('Vui lòng phân loại hoa trước khi xuất báo cáo PDF!');
                     return;
                 }
 
-                // Điền dữ liệu vào Template PDF riêng
-                document.getElementById('pdfSpecies').innerText = species;
-                document.getElementById('pdfConfidence').innerText = document.getElementById('confidenceVal').innerText;
-                document.getElementById('pdfDate').innerText = new Date().toLocaleDateString();
-                document.getElementById('pdfSL').innerText = document.getElementById('sl').value + ' cm';
-                document.getElementById('pdfSW').innerText = document.getElementById('sw').value + ' cm';
-                document.getElementById('pdfPL').innerText = document.getElementById('pl').value + ' cm';
-                document.getElementById('pdfPW').innerText = document.getElementById('pw').value + ' cm';
+                const sl = document.getElementById('sl').value;
+                const sw = document.getElementById('sw').value;
+                const pl = document.getElementById('pl').value;
+                const pw = document.getElementById('pw').value;
+                const conf = document.getElementById('confidenceVal').innerText;
+                const dateStr = new Date().toLocaleDateString('vi-VN');
 
-                const element = document.getElementById('pdfTemplate');
-                element.style.display = 'block';
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Iris_Report_${species}</title>
+                        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+                        <style>
+                            @page { size: A4 portrait; margin: 15mm; }
+                            body { font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; margin: 0; padding: 0; }
+                            .report-box { border: 2px solid #f472b6; border-radius: 20px; padding: 25px; }
+                            .header { text-align: center; border-bottom: 2px solid #fbcfe8; padding-bottom: 15px; margin-bottom: 20px; }
+                            .header h1 { font-family: 'Playfair Display', serif; color: #be185d; margin: 0; font-size: 24px; }
+                            .summary-box { display: flex; justify-content: space-between; background: #faf5f8; padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                            th, td { border: 1px solid #fbcfe8; padding: 10px; text-align: center; font-size: 14px; }
+                            th { background: #fdf2f8; color: #a21caf; }
+                            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 15px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="report-box">
+                            <div class="header">
+                                <h1>🌸 IRIS AI BOTANICAL REPORT</h1>
+                                <p style="color: #64748b; font-size: 12px; margin-top: 5px;">Báo cáo kết quả phân loại loài hoa Iris bằng thuật toán Machine Learning</p>
+                            </div>
 
-                const opt = {
-                    margin:       0.5,
-                    filename:     `Iris_Report_${species}.pdf`,
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2 },
-                    jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
-                };
+                            <div class="summary-box">
+                                <div>
+                                    <div style="font-size: 12px; color: #64748b;">KẾT QUẢ PHÂN LOẠI</div>
+                                    <div style="font-size: 22px; font-weight: bold; color: #be185d; font-family: 'Playfair Display', serif;">${species}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 12px; color: #64748b;">ĐỘ TIN CẬY MODEL</div>
+                                    <div style="font-size: 18px; font-weight: bold; color: #16a34a;">${conf}</div>
+                                </div>
+                            </div>
 
-                html2pdf().set(opt).from(element).save().then(() => {
-                    element.style.display = 'none';
-                });
+                            <h3 style="color: #a21caf; font-size: 15px; margin-bottom: 5px;">CHỈ SỐ ĐẦU VÀO (INPUT METRICS)</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Sepal Length</th>
+                                        <th>Sepal Width</th>
+                                        <th>Petal Length</th>
+                                        <th>Petal Width</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><b>${sl} cm</b></td>
+                                        <td><b>${sw} cm</b></td>
+                                        <td><b>${pl} cm</b></td>
+                                        <td><b>${pw} cm</b></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <div style="margin-top: 25px; background: #fff1f2; border-left: 4px solid #f472b6; padding: 12px 15px; border-radius: 6px; font-size: 12px;">
+                                <strong>Ghi chú:</strong> Dự đoán được thực hiện bởi mô hình Support Vector Machine (SVM) được huấn luyện trên tập dữ liệu chuẩn Iris Dataset.
+                            </div>
+
+                            <div class="footer">
+                                Ngày xuất báo cáo: ${dateStr} • Generated by Iris AI Studio Pro
+                            </div>
+                        </div>
+                        <script>
+                            window.onload = function() {
+                                window.print();
+                            }
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                printWindow.document.close();
             }
         </script>
     </body>
