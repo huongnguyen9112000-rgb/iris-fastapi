@@ -288,8 +288,8 @@ def home():
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(text);
-                    msg.lang = 'vi-VN';
-                    msg.rate = 0.95;
+                    msg.lang = 'en-US';
+                    msg.rate = 0.9;
                     window.speechSynthesis.speak(msg);
                 }
             }
