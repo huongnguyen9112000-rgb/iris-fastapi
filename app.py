@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import joblib
 import numpy as np
 
-app = FastAPI(title="Iris Classification Web App")
+app = FastAPI(title="Iris AI Glassmorphism Platform")
 
 # Load mô hình SVM
 model = joblib.load("svm_model.pkl")
@@ -15,7 +15,6 @@ class IrisInput(BaseModel):
     petal_length: float
     petal_width: float
 
-# Trang web giao diện chính
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
@@ -24,44 +23,134 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Dự Đoán Loài Hoa Iris</title>
+        <title>Iris Classification AI Lab</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
         <style>
-            body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-            .card { border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.95); border: none; }
-            .btn-custom { background: linear-gradient(to right, #667eea, #764ba2); border: none; color: white; border-radius: 10px; padding: 12px; font-weight: bold; width: 100%; transition: all 0.3s; }
-            .btn-custom:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(118, 75, 162, 0.4); }
-            .result-box { display: none; margin-top: 20px; padding: 15px; border-radius: 10px; background: #eef2ff; border-left: 5px solid #667eea; text-align: center; }
+            * { font-family: 'Plus Jakarta Sans', sans-serif; }
+            body {
+                background: radial-gradient(circle at top left, #1e1e38, #0d0e15);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #e2e8f0;
+                overflow-x: hidden;
+            }
+            .glass-card {
+                background: rgba(255, 255, 255, 0.04);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 24px;
+                padding: 2.5rem;
+                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+                position: relative;
+            }
+            .glass-card::before {
+                content: '';
+                position: absolute;
+                top: -2px; left: -2px; right: -2px; bottom: -2px;
+                background: linear-gradient(45deg, #a855f7, #3b82f6, transparent);
+                border-radius: 26px;
+                z-index: -1;
+                opacity: 0.3;
+            }
+            .badge-neon {
+                background: rgba(168, 85, 247, 0.15);
+                color: #c084fc;
+                border: 1px solid rgba(168, 85, 247, 0.3);
+                padding: 6px 16px;
+                border-radius: 20px;
+                font-size: 0.8rem;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                font-weight: 700;
+            }
+            .form-range::-webkit-slider-thumb {
+                background: #c084fc;
+                box-shadow: 0 0 10px #c084fc;
+            }
+            .btn-cyber {
+                background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+                border: none;
+                color: white;
+                font-weight: 700;
+                border-radius: 14px;
+                padding: 14px;
+                letter-spacing: 0.5px;
+                transition: all 0.3s ease;
+                box-shadow: 0 10px 20px rgba(139, 92, 246, 0.3);
+            }
+            .btn-cyber:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 15px 30px rgba(139, 92, 246, 0.5);
+                color: white;
+            }
+            .result-card {
+                display: none;
+                margin-top: 1.5rem;
+                padding: 1.25rem;
+                border-radius: 16px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                text-align: center;
+                animation: fadeIn 0.5s ease-out forwards;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
         </style>
     </head>
     <body>
-        <div class="container" style="max-width: 500px;">
-            <div class="card p-4 my-4">
-                <h3 class="text-center mb-1 text-primary fw-bold">🌺 Iris Predictor</h3>
-                <p class="text-center text-muted mb-4 fs-6">Nhập kích thước để phân loại hoa Iris bằng mô hình SVM</p>
-                
+        <div class="container" style="max-width: 480px;">
+            <div class="glass-card">
+                <div class="text-center mb-4">
+                    <span class="badge-neon mb-2 d-inline-block">SVM Intelligence Engine</span>
+                    <h2 class="fw-extrabold text-white mt-2">Iris AI Predictor</h2>
+                    <p class="text-secondary small">Hệ thống phân loại đa chiều thông số hoa Iris</p>
+                </div>
+
                 <form id="irisForm">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Độ dài đài hoa (Sepal Length): <span id="val1" class="text-primary">5.1</span> cm</label>
-                        <input type="range" class="form-range" id="sepal_length" min="4.0" max="8.0" step="0.1" value="5.1" oninput="val1.innerText=this.value">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-light">Sepal Length</span>
+                            <span id="v1" class="text-info fw-bold">5.1 cm</span>
+                        </div>
+                        <input type="range" class="form-range" id="sepal_length" min="4.0" max="8.0" step="0.1" value="5.1" oninput="v1.innerText=this.value+' cm'">
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Độ rộng đài hoa (Sepal Width): <span id="val2" class="text-primary">3.5</span> cm</label>
-                        <input type="range" class="form-range" id="sepal_width" min="2.0" max="4.5" step="0.1" value="3.5" oninput="val2.innerText=this.value">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-light">Sepal Width</span>
+                            <span id="v2" class="text-info fw-bold">3.5 cm</span>
+                        </div>
+                        <input type="range" class="form-range" id="sepal_width" min="2.0" max="4.5" step="0.1" value="3.5" oninput="v2.innerText=this.value+' cm'">
                     </div>
+
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Độ dài cánh hoa (Petal Length): <span id="val3" class="text-primary">1.4</span> cm</label>
-                        <input type="range" class="form-range" id="petal_length" min="1.0" max="7.0" step="0.1" value="1.4" oninput="val3.innerText=this.value">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-light">Petal Length</span>
+                            <span id="v3" class="text-info fw-bold">1.4 cm</span>
+                        </div>
+                        <input type="range" class="form-range" id="petal_length" min="1.0" max="7.0" step="0.1" value="1.4" oninput="v3.innerText=this.value+' cm'">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Độ rộng cánh hoa (Petal Width): <span id="val4" class="text-primary">0.2</span> cm</label>
-                        <input type="range" class="form-range" id="petal_width" min="0.1" max="2.5" step="0.1" value="0.2" oninput="val4.innerText=this.value">
+
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span class="text-light">Petal Width</span>
+                            <span id="v4" class="text-info fw-bold">0.2 cm</span>
+                        </div>
+                        <input type="range" class="form-range" id="petal_width" min="0.1" max="2.5" step="0.1" value="0.2" oninput="v4.innerText=this.value+' cm'">
                     </div>
-                    <button type="submit" class="btn btn-custom mt-2">Dự Đoán Ngay ✨</button>
+
+                    <button type="submit" class="btn btn-cyber w-100">RUN PREDICTION ⚡</button>
                 </form>
 
-                <div id="result" class="result-box">
-                    <h5 class="m-0 text-dark">Kết quả: <b id="predText" class="text-primary fs-4"></b></h5>
+                <div id="result" class="result-card">
+                    <div class="text-secondary small text-uppercase mb-1">Predicted Class</div>
+                    <h3 id="predText" class="fw-bold m-0 text-capitalize" style="color: #38bdf8;">---</h3>
                 </div>
             </div>
         </div>
@@ -83,7 +172,14 @@ def home():
                 });
                 
                 const result = await response.json();
-                document.getElementById('predText').innerText = result.prediction.toUpperCase();
+                const predElem = document.getElementById('predText');
+                predElem.innerText = result.prediction;
+
+                // Dynamic colors for predicted species
+                if (result.prediction === 'setosa') predElem.style.color = '#38bdf8'; // Cyan
+                else if (result.prediction === 'versicolor') predElem.style.color = '#c084fc'; // Purple
+                else predElem.style.color = '#f43f5e'; // Pink-Red
+
                 document.getElementById('result').style.display = 'block';
             });
         </script>
@@ -91,7 +187,6 @@ def home():
     </html>
     """
 
-# Endpoint dự đoán
 @app.post("/predict")
 def predict(data: IrisInput):
     input_data = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
