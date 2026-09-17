@@ -133,21 +133,40 @@ def home():
                 box-shadow: 0 12px 25px rgba(244, 114, 182, 0.45);
             }
 
-            .result-display {
-                background: linear-gradient(135deg, #fdf2f8 0%, #faf5ff 100%);
-                border: 2px dashed #f472b6;
-                border-radius: 24px;
-                padding: 15px;
-                text-align: center;
+            /* --- Đã cập nhật CSS cho Hero Image --- */
+            .flower-card-hero {
+                position: relative;
+                width: 100%;
+                height: 210px;
+                border-radius: 20px;
+                overflow: hidden;
+                box-shadow: 0 10px 25px rgba(244, 114, 182, 0.2);
+                border: 2px solid #fbcfe8;
             }
 
             .flower-img-preview {
-                width: 80px;
-                height: 80px;
-                border-radius: 50%;
+                width: 100%;
+                height: 100%;
                 object-fit: cover;
-                border: 3px solid #f472b6;
-                box-shadow: 0 5px 15px rgba(244, 114, 182, 0.3);
+                transition: transform 0.4s ease;
+            }
+
+            .flower-card-hero:hover .flower-img-preview {
+                transform: scale(1.06);
+            }
+
+            .badge-confidence-hero {
+                position: absolute;
+                top: 12px;
+                right: 12px;
+                background: rgba(255, 255, 255, 0.92);
+                backdrop-filter: blur(8px);
+                color: #be185d;
+                font-weight: 800;
+                padding: 5px 14px;
+                border-radius: 30px;
+                font-size: 0.85rem;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             }
 
             .progress-pink {
@@ -225,12 +244,15 @@ def home():
                         <div>
                             <h5 class="serif-title fw-bold mb-3 text-dark">3. Kết quả phân loại</h5>
                             
-                            <div class="result-display mb-3 d-flex align-items-center justify-content-around">
-                                <div>
-                                    <div class="small text-uppercase fw-bold text-muted mb-1">DỰ ĐOÁN</div>
-                                    <h3 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h3>
-                                </div>
+                            <!-- --- Khối ảnh Hero mới được thay thế tại đây --- -->
+                            <div class="flower-card-hero mb-3">
                                 <img id="flowerImg" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="flower-img-preview" alt="Iris Flower">
+                                <span class="badge-confidence-hero" id="badgeConf">Match 0%</span>
+                            </div>
+
+                            <div class="text-center mb-3">
+                                <div class="small text-uppercase fw-bold text-muted mb-1">DỰ ĐOÁN LOÀI HOA</div>
+                                <h3 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d; font-size: 1.8rem;">SẴN SÀNG</h3>
                             </div>
 
                             <!-- Confidence Score Gauge -->
@@ -373,6 +395,9 @@ def home():
                 document.getElementById('targetClass').innerText = speciesName;
                 document.getElementById('confidenceVal').innerText = confidence + '%';
                 document.getElementById('confidenceBar').style.width = confidence + '%';
+                
+                // Cập nhật text trên badge góc ảnh
+                document.getElementById('badgeConf').innerText = 'Match ' + confidence + '%';
 
                 if (flowerImages[speciesName]) {
                     document.getElementById('flowerImg').src = flowerImages[speciesName];
