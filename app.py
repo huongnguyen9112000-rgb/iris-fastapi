@@ -129,8 +129,6 @@ def home():
     </head>
     <body>
         <div class="container-fluid" style="max-width: 1200px;">
-            
-            <!-- Header section -->
             <div class="text-center mb-5">
                 <span class="badge rounded-pill px-3 py-2 mb-2" style="background: #fce7f3; color: #be185d; font-weight: 600;">🌸 AI Botanical Classification Studio</span>
                 <h1 class="serif-title display-5 fw-bold text-dark m-0">Iris Flower Analytics</h1>
@@ -138,19 +136,16 @@ def home():
             </div>
 
             <div class="row g-4">
-                <!-- Controls Panel -->
                 <div class="col-lg-4">
                     <div class="bloom-card h-100">
                         <h5 class="serif-title fw-bold mb-3 text-dark">1. Thông số hoa Iris</h5>
                         
-                        <!-- Presets -->
                         <div class="d-flex gap-2 mb-4 flex-wrap">
                             <button class="preset-btn" onclick="setPreset(5.1, 3.5, 1.4, 0.2)">🌸 Setosa</button>
                             <button class="preset-btn" onclick="setPreset(6.0, 2.9, 4.5, 1.5)">🌷 Versicolor</button>
                             <button class="preset-btn" onclick="setPreset(6.9, 3.1, 5.4, 2.1)">🌺 Virginica</button>
                         </div>
 
-                        <!-- Form inputs -->
                         <form id="irisForm" class="d-flex flex-column gap-3">
                             <div class="input-box-floral">
                                 <label>Sepal Length (Đài hoa - Dài)</label>
@@ -174,7 +169,6 @@ def home():
                     </div>
                 </div>
 
-                <!-- Radar Display -->
                 <div class="col-lg-4">
                     <div class="bloom-card h-100 d-flex flex-column">
                         <h5 class="serif-title fw-bold mb-3 text-dark">2. Biểu đồ đặc trưng</h5>
@@ -184,7 +178,6 @@ def home():
                     </div>
                 </div>
 
-                <!-- Output HUD -->
                 <div class="col-lg-4">
                     <div class="bloom-card h-100 d-flex flex-column justify-content-between">
                         <div>
@@ -213,7 +206,6 @@ def home():
         </div>
 
         <script>
-            // Chart.js Radar Chart với tone màu hồng pastel
             const ctx = document.getElementById('radarCanvas').getContext('2d');
             const radarChart = new Chart(ctx, {
                 type: 'radar',
@@ -262,11 +254,9 @@ def home():
                 const pl = parseFloat(document.getElementById('pl').value);
                 const pw = parseFloat(document.getElementById('pw').value);
 
-                // Cập nhật biểu đồ
                 radarChart.data.datasets[0].data = [sl, sw, pl, pw];
                 radarChart.update();
 
-                // Gửi request API
                 const response = await fetch('/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -278,9 +268,8 @@ def home():
                 
                 document.getElementById('targetClass').innerText = speciesName;
 
-                // Giọng nói AI
                 if (document.getElementById('voiceToggle').checked) {
-                    speakResult("Loài hoa dự đoán là " + speciesName);
+                    speakResult("Predicted species is " + speciesName);
                 }
             }
 
@@ -288,7 +277,7 @@ def home():
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
                     const msg = new SpeechSynthesisUtterance(text);
-                    msg.lang = 'en-US';
+                    msg.lang = 'en-US'; // Chuẩn phát âm tiếng Anh chuẩn
                     msg.rate = 0.9;
                     window.speechSynthesis.speak(msg);
                 }
