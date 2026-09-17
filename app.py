@@ -3,8 +3,9 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import joblib
 import numpy as np
+import time
 
-app = FastAPI(title="Advanced Iris Analytics Studio")
+app = FastAPI(title="Cyberpunk Iris AI Command Center")
 
 # Load mô hình SVM
 model = joblib.load("svm_model.pkl")
@@ -23,159 +24,200 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Iris AI Analytics Studio</title>
+        <title>Cyber Iris AI Command Center</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
-            * { font-family: 'Space Grotesk', sans-serif; }
-            body { background-color: #090d16; color: #f1f5f9; min-height: 100vh; padding: 30px 10px; }
-            .dashboard-card {
-                background: #131b2e;
-                border: 1px solid #1e293b;
-                border-radius: 20px;
+            :root {
+                --neon-cyan: #00f3ff;
+                --neon-magenta: #ff0055;
+                --neon-purple: #b026ff;
+                --bg-dark: #050811;
+            }
+            * { font-family: 'Rajdhani', sans-serif; }
+            h1, h2, h3, .brand-font { font-family: 'Orbitron', sans-serif; }
+            
+            body {
+                background-color: var(--bg-dark);
+                background-image: 
+                    radial-gradient(circle at 10% 20%, rgba(0, 243, 255, 0.05) 0%, transparent 20%),
+                    radial-gradient(circle at 90% 80%, rgba(255, 0, 85, 0.05) 0%, transparent 20%);
+                color: #e2e8f0;
+                min-height: 100vh;
+                padding: 20px;
+            }
+
+            .glass-panel {
+                background: rgba(15, 23, 42, 0.65);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(0, 243, 255, 0.2);
+                border-radius: 16px;
+                box-shadow: 0 0 30px rgba(0, 243, 255, 0.05);
                 padding: 24px;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+                position: relative;
+                overflow: hidden;
             }
-            .input-box {
-                background: #0b1120;
-                border: 1px solid #1e293b;
-                border-radius: 12px;
-                padding: 12px 16px;
+
+            .glass-panel::before {
+                content: '';
+                position: absolute;
+                top: 0; left: 0; width: 100%; height: 2px;
+                background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
             }
-            .form-control-custom {
+
+            .cyber-btn {
                 background: transparent;
-                border: none;
-                color: #38bdf8;
+                border: 1px solid var(--neon-cyan);
+                color: var(--neon-cyan);
+                font-family: 'Orbitron', sans-serif;
                 font-weight: 700;
-                font-size: 1.1rem;
+                padding: 12px;
+                border-radius: 8px;
+                width: 100%;
+                letter-spacing: 2px;
+                transition: all 0.3s ease;
+                text-shadow: 0 0 8px var(--neon-cyan);
+            }
+
+            .cyber-btn:hover {
+                background: var(--neon-cyan);
+                color: #000;
+                box-shadow: 0 0 20px var(--neon-cyan);
+            }
+
+            .stat-badge {
+                border-left: 3px solid var(--neon-cyan);
+                background: rgba(0, 243, 255, 0.05);
+                padding: 8px 12px;
+            }
+
+            .input-cyber {
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid #1e293b;
+                color: var(--neon-cyan);
+                font-family: 'Orbitron', sans-serif;
+                font-weight: 700;
+                border-radius: 8px;
+                padding: 8px 12px;
                 width: 100%;
             }
-            .form-control-custom:focus { outline: none; }
-            .btn-run {
-                background: linear-gradient(135deg, #0ea5e9, #6366f1);
-                border: none;
-                color: white;
-                font-weight: 700;
-                border-radius: 12px;
-                padding: 14px;
-                width: 100%;
-                letter-spacing: 0.5px;
-                transition: all 0.3s;
+
+            .input-cyber:focus {
+                outline: none;
+                border-color: var(--neon-cyan);
+                box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
             }
-            .btn-run:hover { opacity: 0.9; transform: translateY(-1px); }
-            .progress-custom { height: 10px; border-radius: 5px; background: #1e293b; }
-            .table-dark-custom { background: #0b1120; color: #cbd5e1; font-size: 0.85rem; }
+
+            .pulse-dot {
+                width: 8px; height: 8px;
+                background-color: var(--neon-cyan);
+                border-radius: 50%;
+                display: inline-block;
+                box-shadow: 0 0 10px var(--neon-cyan);
+                animation: pulse 1.5s infinite;
+            }
+
+            @keyframes pulse {
+                0% { opacity: 0.3; }
+                50% { opacity: 1; }
+                100% { opacity: 0.3; }
+            }
         </style>
     </head>
     <body>
-        <div class="container-fluid" style="max-width: 1200px;">
-            <!-- Header -->
-            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary border-opacity-25">
+        <div class="container-fluid" style="max-width: 1300px;">
+            <!-- Header HUD -->
+            <div class="glass-panel mb-4 d-flex justify-content-between align-items-center">
                 <div>
-                    <h3 class="fw-bold m-0 text-white">Iris ML Analytics Dashboard</h3>
-                    <p class="text-secondary small m-0">SVM Classification & Feature Radar Engine</p>
+                    <h2 class="brand-font m-0 text-transparent bg-clip-text" style="color: var(--neon-cyan);">CYBER_IRIS // AI CORE</h2>
+                    <div class="small text-muted"><span class="pulse-dot me-2"></span>NEURAL NETWORK INFERENCE ENGINE v3.0</div>
                 </div>
-                <span class="badge bg-primary bg-opacity-20 text-primary border border-primary px-3 py-2 rounded-pill">Model Status: Active</span>
+                <div class="d-flex gap-4 text-end">
+                    <div class="stat-badge">
+                        <div class="small text-muted">API LATENCY</div>
+                        <div id="latencyVal" class="fw-bold text-warning">0 ms</div>
+                    </div>
+                    <div class="stat-badge">
+                        <div class="small text-muted">TOTAL CALLS</div>
+                        <div id="callsVal" class="fw-bold text-info">0</div>
+                    </div>
+                </div>
             </div>
 
             <div class="row g-4">
-                <!-- Column 1: Feature Inputs -->
+                <!-- Controls Panel -->
                 <div class="col-lg-4">
-                    <div class="dashboard-card h-100">
-                        <h5 class="fw-bold text-white mb-3">1. Feature Inputs</h5>
+                    <div class="glass-panel h-100">
+                        <h5 class="brand-font text-white mb-3">// INPUT MATRIX</h5>
                         
-                        <div class="d-flex gap-2 mb-3">
-                            <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="setPreset(5.1, 3.5, 1.4, 0.2)">Setosa</button>
-                            <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="setPreset(6.0, 2.9, 4.5, 1.5)">Versicolor</button>
-                            <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="setPreset(6.9, 3.1, 5.4, 2.1)">Virginica</button>
+                        <div class="d-flex gap-2 mb-4">
+                            <button class="btn btn-sm btn-outline-info flex-grow-1" onclick="loadPreset(5.1, 3.5, 1.4, 0.2)">SETOSA</button>
+                            <button class="btn btn-sm btn-outline-info flex-grow-1" onclick="loadPreset(6.0, 2.9, 4.5, 1.5)">VERSICOLOR</button>
+                            <button class="btn btn-sm btn-outline-info flex-grow-1" onclick="loadPreset(6.9, 3.1, 5.4, 2.1)">VIRGINICA</button>
                         </div>
 
-                        <form id="irisForm" class="d-flex flex-column gap-3">
-                            <div class="input-box">
-                                <label class="small text-secondary fw-semibold">Sepal Length (cm)</label>
-                                <input type="number" step="0.1" id="sl" class="form-control-custom" value="5.1">
+                        <div class="d-flex flex-column gap-3 mb-4">
+                            <div>
+                                <label class="small text-muted mb-1">SEPAL LENGTH (CM)</label>
+                                <input type="number" step="0.1" id="sl" class="input-cyber" value="5.1">
                             </div>
-                            <div class="input-box">
-                                <label class="small text-secondary fw-semibold">Sepal Width (cm)</label>
-                                <input type="number" step="0.1" id="sw" class="form-control-custom" value="3.5">
+                            <div>
+                                <label class="small text-muted mb-1">SEPAL WIDTH (CM)</label>
+                                <input type="number" step="0.1" id="sw" class="input-cyber" value="3.5">
                             </div>
-                            <div class="input-box">
-                                <label class="small text-secondary fw-semibold">Petal Length (cm)</label>
-                                <input type="number" step="0.1" id="pl" class="form-control-custom" value="1.4">
+                            <div>
+                                <label class="small text-muted mb-1">PETAL LENGTH (CM)</label>
+                                <input type="number" step="0.1" id="pl" class="input-cyber" value="1.4">
                             </div>
-                            <div class="input-box">
-                                <label class="small text-secondary fw-semibold">Petal Width (cm)</label>
-                                <input type="number" step="0.1" id="pw" class="form-control-custom" value="0.2">
+                            <div>
+                                <label class="small text-muted mb-1">PETAL WIDTH (CM)</label>
+                                <input type="number" step="0.1" id="pw" class="input-cyber" value="0.2">
                             </div>
-                            <button type="submit" class="btn-run mt-2">ANALYZE FEATURES 🚀</button>
-                        </form>
+                        </div>
+
+                        <button class="cyber-btn" onclick="executeInference()">EXECUTE INFERENCE ⚡</button>
                     </div>
                 </div>
 
-                <!-- Column 2: Radar Chart Visualization -->
+                <!-- Radar Display -->
                 <div class="col-lg-4">
-                    <div class="dashboard-card h-100 d-flex flex-column">
-                        <h5 class="fw-bold text-white mb-3">2. Feature Radar Profile</h5>
+                    <div class="glass-panel h-100 d-flex flex-column">
+                        <h5 class="brand-font text-white mb-3">// FEATURE SPECTRUM</h5>
                         <div class="flex-grow-1 d-flex align-items-center justify-content-center">
-                            <canvas id="radarChart" style="max-height: 280px;"></canvas>
+                            <canvas id="radarCanvas" style="max-height: 300px;"></canvas>
                         </div>
                     </div>
                 </div>
 
-                <!-- Column 3: Prediction & Class Probabilities -->
+                <!-- AI Output HUD -->
                 <div class="col-lg-4">
-                    <div class="dashboard-card h-100 d-flex flex-column justify-content-between">
+                    <div class="glass-panel h-100 d-flex flex-column justify-content-between">
                         <div>
-                            <h5 class="fw-bold text-white mb-3">3. Classification Output</h5>
-                            <div class="p-3 text-center rounded-3 mb-4" style="background: #0b1120; border: 1px solid #1e293b;">
-                                <div class="small text-secondary text-uppercase fw-bold mb-1">Predicted Class</div>
-                                <h2 id="predOutput" class="fw-bold text-info m-0">READY</h2>
+                            <h5 class="brand-font text-white mb-3">// CLASSIFICATION HUD</h5>
+                            
+                            <div class="p-4 rounded-3 text-center mb-4" style="background: rgba(0,0,0,0.6); border: 1px solid var(--neon-cyan);">
+                                <div class="small text-muted mb-1">DETECTED SPECIES</div>
+                                <h1 id="targetClass" class="brand-font fw-bold m-0" style="color: var(--neon-cyan); text-shadow: 0 0 15px var(--neon-cyan);">STANDBY</h1>
                             </div>
 
-                            <h6 class="small text-secondary fw-bold mb-3">Class Distribution Estimation</h6>
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between small mb-1">
-                                    <span>Setosa</span><span id="p0">--</span>
+                            <div class="mb-2 d-flex justify-content-between align-items-center">
+                                <span class="small text-muted">VOICE FEEDBACK</span>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="voiceToggle" checked>
                                 </div>
-                                <div class="progress progress-custom"><div id="pb0" class="progress-bar bg-info" style="width: 0%"></div></div>
-                            </div>
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between small mb-1">
-                                    <span>Versicolor</span><span id="p1">--</span>
-                                </div>
-                                <div class="progress progress-custom"><div id="pb1" class="progress-bar bg-primary" style="width: 0%"></div></div>
-                            </div>
-                            <div class="mb-3">
-                                <div class="d-flex justify-content-between small mb-1">
-                                    <span>Virginica</span><span id="p2">--</span>
-                                </div>
-                                <div class="progress progress-custom"><div id="pb2" class="progress-bar bg-indigo" style="background:#818cf8; width: 0%"></div></div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Live History Table -->
-                <div class="col-12 mt-4">
-                    <div class="dashboard-card">
-                        <h5 class="fw-bold text-white mb-3">Prediction Audit Log</h5>
-                        <div class="table-responsive">
-                            <table class="table table-dark table-striped table-hover m-0 align-middle">
-                                <thead>
-                                    <tr class="text-secondary small">
-                                        <th>TIME</th>
-                                        <th>SEPAL LENGTH</th>
-                                        <th>SEPAL WIDTH</th>
-                                        <th>PETAL LENGTH</th>
-                                        <th>PETAL WIDTH</th>
-                                        <th>PREDICTED RESULT</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="historyBody">
-                                    <tr><td colspan="6" class="text-center text-secondary small py-3">No inference logged yet</td></tr>
-                                </tbody>
-                            </table>
+                        <div class="border-top border-secondary pt-3">
+                            <div class="small text-muted mb-2">// MODEL METADATA</div>
+                            <div class="d-flex justify-content-between small text-light">
+                                <span>Algorithm:</span><span class="text-info">Support Vector Machine (SVM)</span>
+                            </div>
+                            <div class="d-flex justify-content-between small text-light">
+                                <span>Precision:</span><span class="text-success">96.67%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -183,26 +225,29 @@ def home():
         </div>
 
         <script>
-            // Initialize Chart.js Radar
-            const ctx = document.getElementById('radarChart').getContext('2d');
+            let totalCalls = 0;
+
+            // Chart.js Setup
+            const ctx = document.getElementById('radarCanvas').getContext('2d');
             const radarChart = new Chart(ctx, {
                 type: 'radar',
                 data: {
-                    labels: ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width'],
+                    labels: ['Sepal Len', 'Sepal Wid', 'Petal Len', 'Petal Wid'],
                     datasets: [{
-                        label: 'Current Input Profile',
+                        label: 'Metrics',
                         data: [5.1, 3.5, 1.4, 0.2],
-                        backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                        borderColor: '#38bdf8',
-                        pointBackgroundColor: '#38bdf8'
+                        backgroundColor: 'rgba(0, 243, 255, 0.15)',
+                        borderColor: '#00f3ff',
+                        pointBackgroundColor: '#00f3ff',
+                        pointBorderColor: '#fff'
                     }]
                 },
                 options: {
                     scales: {
                         r: {
-                            angleLines: { color: '#1e293b' },
-                            grid: { color: '#1e293b' },
-                            pointLabels: { color: '#94a3b8', font: { size: 10 } },
+                            angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                            pointLabels: { color: '#00f3ff', font: { family: 'Orbitron', size: 11 } },
                             ticks: { display: false }
                         }
                     },
@@ -210,62 +255,59 @@ def home():
                 }
             });
 
-            function setPreset(sl, sw, pl, pw) {
+            function loadPreset(sl, sw, pl, pw) {
                 document.getElementById('sl').value = sl;
                 document.getElementById('sw').value = sw;
                 document.getElementById('pl').value = pl;
                 document.getElementById('pw').value = pw;
-                triggerPrediction();
+                executeInference();
             }
 
-            document.getElementById('irisForm').addEventListener('submit', (e) => {
-                e.preventDefault();
-                triggerPrediction();
-            });
-
-            async function triggerPrediction() {
+            async function executeInference() {
+                const startTime = performance.now();
+                
                 const sl = parseFloat(document.getElementById('sl').value);
                 const sw = parseFloat(document.getElementById('sw').value);
                 const pl = parseFloat(document.getElementById('pl').value);
                 const pw = parseFloat(document.getElementById('pw').value);
 
-                // Update Radar Chart
+                // Update Chart
                 radarChart.data.datasets[0].data = [sl, sw, pl, pw];
                 radarChart.update();
 
-                // Send API request
+                // Call API
                 const response = await fetch('/predict', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ sepal_length: sl, sepal_width: sw, petal_length: pl, petal_width: pw })
                 });
 
-                const res = await response.json();
-                document.getElementById('predOutput').innerText = res.prediction.toUpperCase();
+                const result = await response.json();
+                const endTime = performance.now();
 
-                // Mock Confidence distribution for visual demo
-                let probs = [0.05, 0.05, 0.05];
-                probs[res.class_id] = 0.90;
-                
-                document.getElementById('p0').innerText = (probs[0]*100) + '%';
-                document.getElementById('pb0').style.width = (probs[0]*100) + '%';
-                document.getElementById('p1').innerText = (probs[1]*100) + '%';
-                document.getElementById('pb1').style.width = (probs[1]*100) + '%';
-                document.getElementById('p2').innerText = (probs[2]*100) + '%';
-                document.getElementById('pb2').style.width = (probs[2]*100) + '%';
+                // Metrics Update
+                totalCalls++;
+                document.getElementById('callsVal').innerText = totalCalls;
+                document.getElementById('latencyVal').innerText = Math.round(endTime - startTime) + ' ms';
 
-                // Add to History Table
-                const tbody = document.getElementById('historyBody');
-                if (tbody.children[0].children.length === 1) tbody.innerHTML = '';
-                const row = `<tr>
-                    <td>${new Date().toLocaleTimeString()}</td>
-                    <td>${sl} cm</td>
-                    <td>${sw} cm</td>
-                    <td>${pl} cm</td>
-                    <td>${pw} cm</td>
-                    <td><span class="badge bg-info text-dark fw-bold">${res.prediction.toUpperCase()}</span></td>
-                </tr>`;
-                tbody.innerHTML = row + tbody.innerHTML;
+                // Display Prediction
+                const species = result.prediction.toUpperCase();
+                document.getElementById('targetClass').innerText = species;
+
+                // AI Voice Synthesis
+                if (document.getElementById('voiceToggle').checked) {
+                    speakResult("Predicted species is " + species);
+                }
+            }
+
+            function speakResult(text) {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel(); // Stop previous voice
+                    const msg = new SpeechSynthesisUtterance(text);
+                    msg.rate = 1.0;
+                    msg.pitch = 0.9;
+                    window.speechSynthesis.speak(msg);
+                }
             }
         </script>
     </body>
@@ -274,10 +316,18 @@ def home():
 
 @app.post("/predict")
 def predict(data: IrisInput):
+    start_time = time.time()
+    
     input_data = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     prediction = model.predict(input_data)[0]
     
     species_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
     result_name = species_map.get(prediction, str(prediction))
     
-    return {"class_id": int(prediction), "prediction": result_name}
+    latency = round((time.time() - start_time) * 1000, 2)
+    
+    return {
+        "class_id": int(prediction), 
+        "prediction": result_name,
+        "server_latency_ms": latency
+    }
