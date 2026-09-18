@@ -7,7 +7,7 @@ import sqlite3
 import json
 from datetime import datetime
 
-app = FastAPI(title="Botanical Iris AI System - Advanced Care Edition")
+app = FastAPI(title="Botanical Iris AI Ultra System")
 
 # 1. Khởi tạo Cơ sở dữ liệu SQLite
 def init_db():
@@ -40,13 +40,15 @@ class IrisInput(BaseModel):
     petal_length: float
     petal_width: float
 
+class ChatQuery(BaseModel):
+    message: str
+
 # Kiểm tra Anomaly (Dữ liệu bất thường)
 def check_anomaly(sl, sw, pl, pw):
     if sl < 3.0 or sl > 9.0 or sw < 1.5 or sw > 5.0 or pl < 0.5 or pl > 8.0 or pw < 0.0 or pw > 3.5:
         return True
     return False
 
-# Cơ sở dữ liệu tư vấn AI chi tiết chuyên sâu cho từng loài Iris
 DETAILED_AI_CARE_GUIDE = {
     'setosa': {
         "title": "Iris Setosa (Diên vĩ Lông tơ / Bristle-pointed Iris)",
@@ -77,7 +79,7 @@ DETAILED_AI_CARE_GUIDE = {
     }
 }
 
-# Route trang chủ UI
+# Route Giao diện HTML Ultra
 @app.get("/", response_class=HTMLResponse)
 def home():
     return """
@@ -86,49 +88,61 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Iris Pro AI // Enterprise Care System</title>
+        <title>Iris Botanical AI Ultra // Enterprise Suite</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <style>
-            :root { --bg-soft: #fdf8f6; --primary-pink: #f472b6; --text-dark: #334155; }
-            * { font-family: 'Plus Jakarta Sans', sans-serif; }
+            :root { --bg-soft: #fdf8f6; --primary-pink: #f472b6; --text-dark: #1e293b; }
+            * { font-family: 'Plus Jakarta Sans', sans-serif; box-sizing: border-box; }
             .serif-title { font-family: 'Playfair Display', serif; }
-            body { background: linear-gradient(135deg, #fdf8f6 0%, #fef2f2 50%, #f3e8ff 100%); color: var(--text-dark); min-height: 100vh; padding: 25px 15px; }
-            .bloom-card { background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(16px); border: 1px solid rgba(244, 114, 182, 0.2); border-radius: 24px; padding: 22px; box-shadow: 0 10px 30px rgba(244, 114, 182, 0.06); margin-bottom: 20px; }
+            body { background: linear-gradient(135deg, #fdf8f6 0%, #fef2f2 40%, #f3e8ff 100%); color: var(--text-dark); min-height: 100vh; padding: 25px 15px; position: relative; }
+            .bloom-card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(244, 114, 182, 0.25); border-radius: 24px; padding: 22px; box-shadow: 0 12px 35px rgba(244, 114, 182, 0.08); margin-bottom: 20px; transition: transform 0.3s ease; }
             .preset-btn { background: #fff; border: 1px solid #fbcfe8; color: #db2777; border-radius: 14px; padding: 6px 14px; font-weight: 600; font-size: 0.82rem; transition: all 0.2s ease; }
             .preset-btn:hover { background: #fdf2f8; border-color: #f472b6; transform: translateY(-2px); }
             .input-box-floral { background: #faf5f8; border: 1px solid #f5d0fe; border-radius: 16px; padding: 8px 14px; }
-            .input-box-floral label { font-size: 0.75rem; font-weight: 700; color: #a21caf; text-transform: uppercase; }
+            .input-box-floral label { font-size: 0.72rem; font-weight: 700; color: #a21caf; text-transform: uppercase; }
             .form-control-floral { background: transparent; border: none; color: #701a75; font-weight: 700; font-size: 1rem; width: 100%; }
             .form-control-floral:focus { outline: none; }
             .btn-bloom { background: linear-gradient(135deg, #f472b6 0%, #a855f7 100%); border: none; color: white; font-weight: 700; border-radius: 18px; padding: 12px; width: 100%; font-size: 0.95rem; box-shadow: 0 8px 18px rgba(244, 114, 182, 0.3); transition: all 0.3s ease; }
             .btn-bloom:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(244, 114, 182, 0.4); }
-            .flower-card-hero { position: relative; width: 100%; height: 180px; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 20px rgba(244, 114, 182, 0.15); border: 2px solid #fbcfe8; }
-            .flower-img-preview { width: 100%; height: 100%; object-fit: cover; }
+            .flower-card-hero { position: relative; width: 100%; height: 180px; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 20px rgba(244, 114, 182, 0.15); border: 2px solid #fbcfe8; perspective: 1000px; }
+            .flower-img-preview { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
+            .flower-card-hero:hover .flower-img-preview { transform: scale(1.05); }
             .badge-confidence-hero { position: absolute; top: 10px; right: 10px; background: rgba(255, 255, 255, 0.92); color: #be185d; font-weight: 800; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
-            .progress-pink { height: 8px; border-radius: 10px; background-color: #fce7f3; }
-            .progress-bar-pink { background: linear-gradient(90deg, #f472b6, #c084fc); border-radius: 10px; }
-            .toast-notification { position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: #1e293b; color: #fff; padding: 12px 20px; border-radius: 14px; display: none; align-items: center; gap: 10px; font-size: 0.88rem; }
-            
-            /* Style cho Báo cáo Tư vấn AI */
             .care-item { background: #ffffff; border-left: 4px solid #f472b6; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.82rem; }
             .care-item-title { font-weight: 700; color: #9d174d; text-transform: uppercase; font-size: 0.72rem; margin-bottom: 2px; }
+
+            /* Chatbot Widget AI */
+            .chat-widget { position: fixed; bottom: 25px; right: 25px; z-index: 9999; }
+            .chat-toggle-btn { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #a855f7, #f472b6); color: white; border: none; font-size: 1.6rem; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4); cursor: pointer; transition: transform 0.3s ease; }
+            .chat-toggle-btn:hover { transform: scale(1.1); }
+            .chat-box { width: 340px; height: 440px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
+            .chat-header { background: linear-gradient(135deg, #f472b6, #a855f7); color: white; padding: 12px 16px; font-weight: 700; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+            .chat-body { flex: 1; padding: 12px; overflow-y: auto; font-size: 0.82rem; display: flex; flex-direction: column; gap: 8px; }
+            .chat-msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; word-wrap: break-word; }
+            .chat-msg.bot { background: #fdf2f8; color: #831843; border-bottom-left-radius: 2px; align-self: flex-start; }
+            .chat-msg.user { background: #a855f7; color: white; border-bottom-right-radius: 2px; align-self: flex-end; }
+            .chat-input-area { padding: 8px; border-top: 1px solid #fbcfe8; display: flex; gap: 6px; }
+            .chat-input { flex: 1; border: 1px solid #fbcfe8; border-radius: 12px; padding: 6px 10px; font-size: 0.82rem; outline: none; }
+
+            /* CSS khi In / Export PDF */
+            @media print {
+                body { background: white !important; padding: 0 !important; }
+                .chat-widget, .btn-bloom, .preset-btn, button, .toast-notification { display: none !important; }
+                .bloom-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+            }
         </style>
     </head>
     <body>
 
-        <div id="toastAlert" class="toast-notification">
-            <span id="toastIcon">🔔</span>
-            <span id="toastMsg">Notification message</span>
-        </div>
-
+        <!-- Container Chính -->
         <div class="container-fluid" style="max-width: 1400px;">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <span class="badge rounded-pill px-3 py-1 mb-1" style="background: #fce7f3; color: #be185d; font-weight: 700;">🌸 AI Enterprise Care & Analytics</span>
-                    <h2 class="serif-title fw-bold text-dark m-0">Botanical Intelligence Dashboard</h2>
+                    <span class="badge rounded-pill px-3 py-1 mb-1" style="background: #fce7f3; color: #be185d; font-weight: 700;">🌸 AI Ultra Enterprise Suite v3.0</span>
+                    <h2 class="serif-title fw-bold text-dark m-0">Botanical Iris Intelligence Dashboard</h2>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-sm btn-outline-secondary rounded-3 fw-bold" onclick="exportData('json')">📥 Export JSON</button>
@@ -156,38 +170,36 @@ def home():
                     </div>
                 </div>
 
-                <!-- Cột 2: Dự đoán & XAI -->
+                <!-- Cột 2: Kết quả & Đồ thị Xác suất -->
                 <div class="col-lg-4">
                     <div class="bloom-card h-100 d-flex flex-column justify-content-between">
                         <div>
-                            <h6 class="serif-title fw-bold mb-2 text-dark">2. Phân loại & Giải thích XAI</h6>
+                            <h6 class="serif-title fw-bold mb-2 text-dark">2. Phân loại & Xác suất ML</h6>
                             <div class="flower-card-hero mb-2">
                                 <img id="flowerImg" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="flower-img-preview" alt="Iris">
                                 <span class="badge-confidence-hero" id="badgeConf">Match 0%</span>
                             </div>
                             <div class="text-center mb-2">
-                                <div class="small text-uppercase fw-bold text-muted" style="font-size: 0.72rem;">KẾT QUẢ PHÂN LOẠI</div>
+                                <div class="small text-uppercase fw-bold text-muted" style="font-size: 0.72rem;">KẾT QUẢ DỰ ĐOÁN</div>
                                 <h4 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h4>
                             </div>
+                            <!-- Chart Xác Suất -->
                             <div class="p-2 rounded-3 mb-2" style="background: #faf5f8; border: 1px solid #f5d0fe;">
-                                <div class="d-flex justify-content-between small fw-bold mb-1">
-                                    <span style="color: #a21caf; font-size: 0.72rem;">ĐỘ TIN CẬY:</span>
-                                    <span id="confidenceVal" style="color: #be185d; font-size: 0.72rem;">0%</span>
-                                </div>
-                                <div class="progress progress-pink"><div id="confidenceBar" class="progress-bar progress-bar-pink" style="width: 0%"></div></div>
+                                <div class="small fw-bold text-uppercase mb-1" style="color: #a21caf; font-size: 0.72rem;">📊 Phân bố xác suất 3 loài:</div>
+                                <canvas id="probChart" style="max-height: 100px;"></canvas>
                             </div>
                         </div>
 
                         <div>
                             <div class="p-2 rounded-4 mb-2" style="background: #faf5f8; border: 1px solid #f5d0fe;">
                                 <div class="small fw-bold text-uppercase mb-1" style="color: #a21caf; font-size: 0.72rem;">💡 XAI - Đóng góp chỉ số:</div>
-                                <div id="xaiContainer" class="small text-muted">Nhấn phân tích để xem đóng góp.</div>
+                                <div id="xaiContainer" class="small text-muted">Bấm phân tích để xem đóng góp.</div>
                             </div>
                             <div class="d-flex align-items-center justify-content-between px-1 mb-2">
                                 <span class="small fw-semibold text-secondary" style="font-size: 0.78rem;">🔊 Giọng đọc AI</span>
                                 <div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="voiceToggle" checked></div>
                             </div>
-                            <button class="btn btn-outline-danger w-100 rounded-3 fw-bold py-1" style="font-size: 0.82rem;" onclick="exportPDFReport()">📄 In / Xuất Báo Cáo PDF</button>
+                            <button class="btn btn-outline-danger w-100 rounded-3 fw-bold py-1" style="font-size: 0.82rem;" onclick="exportPDFReport()">📄 Xuất Báo Cáo PDF A4</button>
                         </div>
                     </div>
                 </div>
@@ -209,7 +221,7 @@ def home():
                 </div>
             </div>
 
-            <!-- Hàng 2: Lịch sử SQLite -->
+            <!-- Hàng Lịch Sử SQLite -->
             <div class="row mt-2">
                 <div class="col-12">
                     <div class="bloom-card">
@@ -238,12 +250,45 @@ def home():
             </div>
         </div>
 
+        <!-- Chatbot AI Widget -->
+        <div class="chat-widget">
+            <div class="chat-box" id="chatBox">
+                <div class="chat-header">
+                    <span>💬 Trợ lý AI Botanical</span>
+                    <button onclick="toggleChat()" style="background:none; border:none; color:white; font-weight:bold;">✕</button>
+                </div>
+                <div class="chat-body" id="chatBody">
+                    <div class="chat-msg bot">Xin chào! Tôi là Trợ lý AI Botanical. Bạn có thắc mắc gì về kỹ thuật chăm sóc hoa Iris không?</div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="Hỏi AI về phân bón, tưới nước..." onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <button class="btn btn-sm btn-primary rounded-3" onclick="sendChatMessage()">Gửi</button>
+                </div>
+            </div>
+            <button class="chat-toggle-btn" onclick="toggleChat()">🤖</button>
+        </div>
+
         <script>
             const flowerImages = {
                 'SETOSA': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
                 'VERSICOLOR': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
                 'VIRGINICA': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
             };
+
+            // Chart Xác Suất
+            const ctxProb = document.getElementById('probChart').getContext('2d');
+            const probChart = new Chart(ctxProb, {
+                type: 'bar',
+                data: {
+                    labels: ['Setosa', 'Versicolor', 'Virginica'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#f472b6', '#c084fc', '#60a5fa'],
+                        borderRadius: 8
+                    }]
+                },
+                options: { plugins: { legend: { display: false } }, scales: { y: { max: 100, ticks: { display: false } } } }
+            });
 
             function setPreset(sl, sw, pl, pw) {
                 document.getElementById('sl').value = sl; document.getElementById('sw').value = sw;
@@ -270,13 +315,15 @@ def home():
                 const confidence = result.confidence;
 
                 document.getElementById('targetClass').innerText = speciesName;
-                document.getElementById('confidenceVal').innerText = confidence + '%';
-                document.getElementById('confidenceBar').style.width = confidence + '%';
                 document.getElementById('badgeConf').innerText = 'Match ' + confidence + '%';
 
                 if (flowerImages[speciesName]) document.getElementById('flowerImg').src = flowerImages[speciesName];
 
-                // Cập nhật Anomaly Status
+                // Cập nhật Chart xác suất
+                probChart.data.datasets[0].data = result.probabilities;
+                probChart.update();
+
+                // Anomaly Status
                 const anomalyBadge = document.getElementById('anomalyStatus');
                 if(result.is_anomaly) {
                     anomalyBadge.className = 'badge bg-danger';
@@ -292,7 +339,6 @@ def home():
                 confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 }, colors: ['#f472b6', '#c084fc'] });
                 if (document.getElementById('voiceToggle').checked) speakResult("Predicted species is " + speciesName);
 
-                showToast(`Đã cập nhật báo cáo chăm sóc & lưu SQLite thành công!`, '🌿');
                 loadLogs();
             }
 
@@ -316,14 +362,6 @@ def home():
                     <div class="care-item"><div class="care-item-title">🛡️ Phòng ngừa sâu bệnh</div><div>${guide.pest_note}</div></div>
                 `;
                 document.getElementById('careReportContainer').innerHTML = html;
-            }
-
-            function showToast(msg, icon = '🔔') {
-                const toast = document.getElementById('toastAlert');
-                document.getElementById('toastMsg').innerText = msg;
-                document.getElementById('toastIcon').innerText = icon;
-                toast.style.display = 'flex';
-                setTimeout(() => { toast.style.display = 'none'; }, 3500);
             }
 
             function speakResult(text) {
@@ -351,6 +389,33 @@ def home():
                 `).join('');
             }
 
+            // Chatbot Handler
+            function toggleChat() {
+                const box = document.getElementById('chatBox');
+                box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+            }
+
+            async function sendChatMessage() {
+                const input = document.getElementById('chatInput');
+                const msg = input.value.trim();
+                if(!msg) return;
+
+                const chatBody = document.getElementById('chatBody');
+                chatBody.innerHTML += `<div class="chat-msg user">${msg}</div>`;
+                input.value = '';
+                chatBody.scrollTop = chatBody.scrollHeight;
+
+                const res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message: msg })
+                });
+                const data = await res.json();
+
+                chatBody.innerHTML += `<div class="chat-msg bot">${data.reply}</div>`;
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+
             function exportData(type) { window.location.href = `/export/${type}`; }
             function exportPDFReport() { window.print(); }
 
@@ -367,11 +432,14 @@ def predict(data: IrisInput):
     input_data = np.array([[sl, sw, pl, pw]])
     
     prediction = model.predict(input_data)[0]
-    confidence = 98.5
+    
+    # Tính xác suất giả lập hoặc thật
+    probs = [5.0, 5.0, 90.0]
     if hasattr(model, "predict_proba"):
-        probs = model.predict_proba(input_data)[0]
-        confidence = round(float(np.max(probs)) * 100, 1)
+        raw_probs = model.predict_proba(input_data)[0]
+        probs = [round(float(p) * 100, 1) for p in raw_probs]
 
+    confidence = max(probs)
     species_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
     result_name = species_map.get(prediction, str(prediction)).lower()
 
@@ -386,7 +454,7 @@ def predict(data: IrisInput):
 
     care_guide = DETAILED_AI_CARE_GUIDE.get(result_name, DETAILED_AI_CARE_GUIDE['setosa'])
 
-    # Lưu dữ liệu vào SQLite
+    # Lưu SQLite
     conn = sqlite3.connect("iris_enterprise.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -399,11 +467,27 @@ def predict(data: IrisInput):
     return {
         "prediction": result_name,
         "confidence": confidence,
+        "probabilities": probs,
         "is_anomaly": is_anomaly,
         "xai_contributions": xai_contributions,
         "care_guide": care_guide,
         "status": "ANOMALY_DETECTED" if is_anomaly else "SUCCESS"
     }
+
+# API Chatbot AI
+@app.post("/chat")
+def chat_bot(query: ChatQuery):
+    msg = query.message.lower()
+    if "tưới" in msg:
+        reply = "Hoa Iris cần tưới 2-3 lần/tuần tùy loài. Riêng Iris Versicolor có thể chịu được đất ngập nước nhẹ."
+    elif "phân" in msg or "dinh dưỡng" in msg:
+        reply = "Nên dùng phân NPK 10-10-10 vào đầu mùa xuân. Trước mùa hoa nở 3 tuần, bổ sung thêm Phốt pho và Kali."
+    elif "bệnh" in msg or "sâu" in msg:
+        reply = "Cần chú ý bệnh sâu bọ xòe lá (Iris borer) và nấm đốm lá. Hãy tỉa bớt lá già mục vào cuối mùa thu."
+    else:
+        reply = "Tôi có thể giúp bạn giải đáp về ánh sáng, nhiệt độ, lịch tưới nước và chăm sóc hoa Iris. Hãy đặt câu hỏi cụ thể nhé!"
+    
+    return {"reply": reply}
 
 # Lấy lịch sử từ SQLite
 @app.get("/logs/db")
