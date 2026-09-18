@@ -118,10 +118,10 @@ def home():
             .chat-widget { position: fixed; bottom: 25px; right: 25px; z-index: 9999; }
             .chat-toggle-btn { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #a855f7, #f472b6); color: white; border: none; font-size: 1.6rem; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4); cursor: pointer; transition: transform 0.3s ease; }
             .chat-toggle-btn:hover { transform: scale(1.1); }
-            .chat-box { width: 350px; height: 480px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
+            .chat-box { width: 370px; height: 520px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
             .chat-header { background: linear-gradient(135deg, #f472b6, #a855f7); color: white; padding: 12px 16px; font-weight: 700; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
             .chat-body { flex: 1; padding: 12px; overflow-y: auto; font-size: 0.82rem; display: flex; flex-direction: column; gap: 8px; }
-            .chat-msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; word-wrap: break-word; }
+            .chat-msg { max-width: 82%; padding: 8px 12px; border-radius: 14px; word-wrap: break-word; line-height: 1.4; }
             .chat-msg.bot { background: #fdf2f8; color: #831843; border-bottom-left-radius: 2px; align-self: flex-start; }
             .chat-msg.user { background: #a855f7; color: white; border-bottom-right-radius: 2px; align-self: flex-end; }
             .chat-input-area { padding: 8px; border-top: 1px solid #fbcfe8; display: flex; gap: 6px; }
@@ -130,7 +130,8 @@ def home():
             /* Nút gợi ý Chatbot */
             .border-pink { border: 1px solid #f472b6 !important; }
             .text-pink { color: #be185d !important; font-weight: 600; }
-            .btn-light.border-pink:hover { background-color: #fbcfe8 !important; }
+            .btn-quick-prompt { background: #ffffff; transition: all 0.2s ease; cursor: pointer; white-space: nowrap; }
+            .btn-quick-prompt:hover { background-color: #fbcfe8 !important; transform: translateY(-1px); }
 
             /* HIỆU ỨNG CÁNH HOA RƠI */
             #petal-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; overflow: hidden; }
@@ -271,14 +272,18 @@ def home():
                     <button onclick="toggleChat()" style="background:none; border:none; color:white; font-weight:bold;">✕</button>
                 </div>
                 <div class="chat-body" id="chatBody">
-                    <div class="chat-msg bot">Xin chào! Tôi là Trợ lý AI Botanical. Bạn có thắc mắc gì về kỹ thuật chăm sóc hoa Iris không?</div>
+                    <div class="chat-msg bot">Xin chào! Tôi là Trợ lý AI Botanical. Bạn có thể chọn câu hỏi bên dưới hoặc tự nhập câu hỏi về hoa Iris nhé!</div>
                 </div>
 
-                <!-- Các nút câu hỏi gợi ý -->
-                <div class="p-2 d-flex gap-1 flex-wrap" style="background: #fdf2f8; border-top: 1px solid #fbcfe8;">
-                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Cách tưới nước?')">💧 Cách tưới nước?</button>
-                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Bón phân gì?')">🧪 Bón phân gì?</button>
-                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Phòng sâu bệnh?')">🛡️ Phòng sâu bệnh?</button>
+                <!-- CÁC NÚT CÂU HỎI GỢI Ý ĐƯỢC MỞ RỘNG -->
+                <div class="p-2 d-flex gap-1 flex-wrap" style="background: #fdf2f8; border-top: 1px solid #fbcfe8; max-height: 110px; overflow-y: auto;">
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Cách tưới nước?')">💧 Cách tưới nước?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Bón phân gì?')">🧪 Bón phân gì?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Phòng sâu bệnh?')">🛡️ Phòng sâu bệnh?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Đất trồng thế nào?')">🌱 Đất trồng thế nào?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Cần bao nhiêu ánh sáng?')">☀️ Cần bao nhiêu ánh sáng?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Cách nhân giống?')">✂️ Cách nhân giống?</button>
+                    <button class="btn btn-sm btn-quick-prompt border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.7rem;" onclick="sendQuickQuery('Cắt tỉa lá khi nào?')">🍂 Cắt tỉa lá khi nào?</button>
                 </div>
 
                 <div class="chat-input-area">
@@ -519,18 +524,26 @@ def predict(data: IrisInput):
         "status": "ANOMALY_DETECTED" if is_anomaly else "SUCCESS"
     }
 
-# API Chatbot AI
+# API Chatbot AI bổ sung xử lý các câu hỏi mở rộng
 @app.post("/chat")
 def chat_bot(query: ChatQuery):
     msg = query.message.lower()
     if "tưới" in msg:
-        reply = "Hoa Iris cần tưới 2-3 lần/tuần tùy loài. Riêng Iris Versicolor có thể chịu được đất ngập nước nhẹ."
+        reply = "💧 Hoa Iris cần tưới 2-3 lần/tuần tùy loài. Duy trì độ ẩm nhẹ cho đất. Riêng Iris Versicolor chịu ngập nước nhẹ."
     elif "phân" in msg or "dinh dưỡng" in msg:
-        reply = "Nên dùng phân NPK 10-10-10 vào đầu mùa xuân. Trước mùa hoa nở 3 tuần, bổ sung thêm Phốt pho và Kali."
+        reply = "🧪 Nên dùng phân NPK 10-10-10 tan chậm vào đầu mùa xuân. Trước mùa hoa nở 3 tuần, bổ sung thêm Phốt pho và Kali để hoa đậm màu."
     elif "bệnh" in msg or "sâu" in msg:
-        reply = "Cần chú ý bệnh sâu bọ xòe lá (Iris borer) và nấm đốm lá. Hãy tỉa bớt lá già mục vào cuối mùa thu."
+        reply = "🛡️ Cần chú ý sâu bọ xòe lá (Iris borer) và nấm đốm lá. Hãy cắt tỉa lá khô gãy và dọn dẹp gốc cây vào mùa thu."
+    elif "đất" in msg:
+        reply = "🌱 Đất lý tưởng là đất mùn giàu dinh dưỡng, pH từ 6.0 - 7.0, giữ ẩm tốt nhưng cần thoát nước hiệu quả để tránh thối củ."
+    elif "sáng" in msg or "nắng" in msg:
+        reply = "☀️ Hoa Iris ưa nắng! Cần ít nhất 4 - 8 giờ ánh sáng mặt trời mỗi ngày để hoa nở to và giữ được độ rực rỡ."
+    elif "nhân giống" in msg or "trồng" in msg:
+        reply = "✂️ Nhân giống phổ biến nhất bằng cách tách củ (rễ củ) vào muộn mùa hè hoặc đầu mùa thu sau khi hoa đã tàn."
+    elif "cắt" in msg or "tỉa" in msg or "lá" in msg:
+        reply = "🍂 Cắt bỏ cành hoa đã tàn tận gốc. Cắt tỉa bớt lá khô/vàng vào cuối mùa thu để chuẩn bị cho kỳ nghỉ đông."
     else:
-        reply = "Tôi có thể giúp bạn giải đáp về ánh sáng, nhiệt độ, lịch tưới nước và chăm sóc hoa Iris. Hãy đặt câu hỏi cụ thể nhé!"
+        reply = "🤖 Tôi có thể giải đáp về ánh sáng, tưới nước, phân bón, đất trồng và nhân giống hoa Iris. Bạn cần hỗ trợ gì cụ thể?"
     
     return {"reply": reply}
 
