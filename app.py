@@ -118,7 +118,7 @@ def home():
             .chat-widget { position: fixed; bottom: 25px; right: 25px; z-index: 9999; }
             .chat-toggle-btn { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #a855f7, #f472b6); color: white; border: none; font-size: 1.6rem; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4); cursor: pointer; transition: transform 0.3s ease; }
             .chat-toggle-btn:hover { transform: scale(1.1); }
-            .chat-box { width: 340px; height: 440px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
+            .chat-box { width: 350px; height: 480px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
             .chat-header { background: linear-gradient(135deg, #f472b6, #a855f7); color: white; padding: 12px 16px; font-weight: 700; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
             .chat-body { flex: 1; padding: 12px; overflow-y: auto; font-size: 0.82rem; display: flex; flex-direction: column; gap: 8px; }
             .chat-msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; word-wrap: break-word; }
@@ -126,8 +126,13 @@ def home():
             .chat-msg.user { background: #a855f7; color: white; border-bottom-right-radius: 2px; align-self: flex-end; }
             .chat-input-area { padding: 8px; border-top: 1px solid #fbcfe8; display: flex; gap: 6px; }
             .chat-input { flex: 1; border: 1px solid #fbcfe8; border-radius: 12px; padding: 6px 10px; font-size: 0.82rem; outline: none; }
+            
+            /* Nút gợi ý Chatbot */
+            .border-pink { border: 1px solid #f472b6 !important; }
+            .text-pink { color: #be185d !important; font-weight: 600; }
+            .btn-light.border-pink:hover { background-color: #fbcfe8 !important; }
 
-            /* HIỆU ỨNG CÁNH HOA RƠI (PETALS FALLING ANIMATION) */
+            /* HIỆU ỨNG CÁNH HOA RƠI */
             #petal-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; overflow: hidden; }
             .petal { position: absolute; background: linear-gradient(135deg, #f472b6, #e879f9, #fbcfe8); opacity: 0.75; border-radius: 150% 0 150% 0; box-shadow: 0 2px 5px rgba(244, 114, 182, 0.2); animation: fall linear infinite; }
             @keyframes fall {
@@ -136,7 +141,6 @@ def home():
                 100% { opacity: 0; transform: translate(-50px, 105vh) rotate(360deg) scale(0.6); }
             }
 
-            /* CSS khi In / Export PDF */
             @media print {
                 body { background: white !important; padding: 0 !important; }
                 #petal-container, .chat-widget, .btn-bloom, .preset-btn, button, .toast-notification { display: none !important; }
@@ -146,10 +150,8 @@ def home():
     </head>
     <body>
 
-        <!-- Container Cánh hoa rơi background -->
         <div id="petal-container"></div>
 
-        <!-- Container Chính -->
         <div class="container-fluid" style="max-width: 1400px; position: relative; z-index: 2;">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
@@ -195,7 +197,6 @@ def home():
                                 <div class="small text-uppercase fw-bold text-muted" style="font-size: 0.72rem;">KẾT QUẢ DỰ ĐOÁN</div>
                                 <h4 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h4>
                             </div>
-                            <!-- Chart Xác Suất -->
                             <div class="p-2 rounded-3 mb-2" style="background: #faf5f8; border: 1px solid #f5d0fe;">
                                 <div class="small fw-bold text-uppercase mb-1" style="color: #a21caf; font-size: 0.72rem;">📊 Phân bố xác suất 3 loài:</div>
                                 <canvas id="probChart" style="max-height: 100px;"></canvas>
@@ -272,6 +273,14 @@ def home():
                 <div class="chat-body" id="chatBody">
                     <div class="chat-msg bot">Xin chào! Tôi là Trợ lý AI Botanical. Bạn có thắc mắc gì về kỹ thuật chăm sóc hoa Iris không?</div>
                 </div>
+
+                <!-- Các nút câu hỏi gợi ý -->
+                <div class="p-2 d-flex gap-1 flex-wrap" style="background: #fdf2f8; border-top: 1px solid #fbcfe8;">
+                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Cách tưới nước?')">💧 Cách tưới nước?</button>
+                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Bón phân gì?')">🧪 Bón phân gì?</button>
+                    <button class="btn btn-sm btn-light border-pink text-pink rounded-pill py-0 px-2" style="font-size: 0.72rem;" onclick="sendQuickQuery('Phòng sâu bệnh?')">🛡️ Phòng sâu bệnh?</button>
+                </div>
+
                 <div class="chat-input-area">
                     <input type="text" id="chatInput" class="chat-input" placeholder="Hỏi AI về phân bón, tưới nước..." onkeypress="if(event.key==='Enter') sendChatMessage()">
                     <button class="btn btn-sm btn-primary rounded-3" onclick="sendChatMessage()">Gửi</button>
@@ -281,24 +290,21 @@ def home():
         </div>
 
         <script>
-            // TẠO CÁNH HOA RƠI TỰ ĐỘNG
             function createPetals() {
                 const container = document.getElementById('petal-container');
-                const petalCount = 28; // Số lượng cánh hoa rơi cùng lúc
+                const petalCount = 28;
 
                 for (let i = 0; i < petalCount; i++) {
                     const petal = document.createElement('div');
                     petal.classList.add('petal');
                     
-                    // Ngẫu nhiên kích thước cánh hoa
                     const width = Math.random() * 12 + 10;
                     const height = width * (Math.random() * 0.6 + 1.2);
                     petal.style.width = `${width}px`;
                     petal.style.height = `${height}px`;
 
-                    // Ngẫu nhiên vị trí xuất phát & thời gian rơi
                     petal.style.left = `${Math.random() * 100}vw`;
-                    petal.style.animationDuration = `${Math.random() * 6 + 6}s`; // 6s - 12s
+                    petal.style.animationDuration = `${Math.random() * 6 + 6}s`;
                     petal.style.animationDelay = `${Math.random() * 5}s`;
                     
                     container.appendChild(petal);
@@ -311,7 +317,6 @@ def home():
                 'VIRGINICA': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
             };
 
-            // Chart Xác Suất
             const ctxProb = document.getElementById('probChart').getContext('2d');
             const probChart = new Chart(ctxProb, {
                 type: 'bar',
@@ -355,11 +360,9 @@ def home():
 
                 if (flowerImages[speciesName]) document.getElementById('flowerImg').src = flowerImages[speciesName];
 
-                // Cập nhật Chart xác suất
                 probChart.data.datasets[0].data = result.probabilities;
                 probChart.update();
 
-                // Anomaly Status
                 const anomalyBadge = document.getElementById('anomalyStatus');
                 if(result.is_anomaly) {
                     anomalyBadge.className = 'badge bg-danger';
@@ -425,10 +428,14 @@ def home():
                 `).join('');
             }
 
-            // Chatbot Handler
             function toggleChat() {
                 const box = document.getElementById('chatBox');
                 box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+            }
+
+            function sendQuickQuery(text) {
+                document.getElementById('chatInput').value = text;
+                sendChatMessage();
             }
 
             async function sendChatMessage() {
@@ -472,7 +479,6 @@ def predict(data: IrisInput):
     
     prediction = model.predict(input_data)[0]
     
-    # Tính xác suất giả lập hoặc thật
     probs = [5.0, 5.0, 90.0]
     if hasattr(model, "predict_proba"):
         raw_probs = model.predict_proba(input_data)[0]
@@ -550,7 +556,11 @@ def get_db_logs():
 @app.get("/export/json")
 def export_json():
     logs = get_db_logs()["data"]
-    return Response(content=json.dumps(logs, ensure_ascii=False, indent=2), media_type="application/json", headers={"Content-Disposition": "attachment; filename=iris_logs.json"})
+    return Response(
+        content=json.dumps(logs, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=iris_logs.json"}
+    )
 
 # Export CSV
 @app.get("/export/csv")
@@ -560,4 +570,8 @@ def export_csv():
     for item in logs:
         inp = item["input"]
         csv_content += f"{item['timestamp']},{inp['sl']},{inp['sw']},{inp['pl']},{inp['pw']},{item['prediction']},{item['confidence']}%,{item['is_anomaly']}\n"
-    return Response(content=csv_content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_logs.csv"})
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=iris_logs.csv"}
+    )
