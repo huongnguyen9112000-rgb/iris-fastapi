@@ -97,8 +97,8 @@ def home():
             :root { --bg-soft: #fdf8f6; --primary-pink: #f472b6; --text-dark: #1e293b; }
             * { font-family: 'Plus Jakarta Sans', sans-serif; box-sizing: border-box; }
             .serif-title { font-family: 'Playfair Display', serif; }
-            body { background: linear-gradient(135deg, #fdf8f6 0%, #fef2f2 40%, #f3e8ff 100%); color: var(--text-dark); min-height: 100vh; padding: 25px 15px; position: relative; }
-            .bloom-card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(244, 114, 182, 0.25); border-radius: 24px; padding: 22px; box-shadow: 0 12px 35px rgba(244, 114, 182, 0.08); margin-bottom: 20px; transition: transform 0.3s ease; }
+            body { background: linear-gradient(135deg, #fdf8f6 0%, #fef2f2 40%, #f3e8ff 100%); color: var(--text-dark); min-height: 100vh; padding: 25px 15px; position: relative; overflow-x: hidden; }
+            .bloom-card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(244, 114, 182, 0.25); border-radius: 24px; padding: 22px; box-shadow: 0 12px 35px rgba(244, 114, 182, 0.08); margin-bottom: 20px; transition: transform 0.3s ease; position: relative; z-index: 2; }
             .preset-btn { background: #fff; border: 1px solid #fbcfe8; color: #db2777; border-radius: 14px; padding: 6px 14px; font-weight: 600; font-size: 0.82rem; transition: all 0.2s ease; }
             .preset-btn:hover { background: #fdf2f8; border-color: #f472b6; transform: translateY(-2px); }
             .input-box-floral { background: #faf5f8; border: 1px solid #f5d0fe; border-radius: 16px; padding: 8px 14px; }
@@ -127,21 +127,33 @@ def home():
             .chat-input-area { padding: 8px; border-top: 1px solid #fbcfe8; display: flex; gap: 6px; }
             .chat-input { flex: 1; border: 1px solid #fbcfe8; border-radius: 12px; padding: 6px 10px; font-size: 0.82rem; outline: none; }
 
+            /* HIỆU ỨNG CÁNH HOA RƠI (PETALS FALLING ANIMATION) */
+            #petal-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; overflow: hidden; }
+            .petal { position: absolute; background: linear-gradient(135deg, #f472b6, #e879f9, #fbcfe8); opacity: 0.75; border-radius: 150% 0 150% 0; box-shadow: 0 2px 5px rgba(244, 114, 182, 0.2); animation: fall linear infinite; }
+            @keyframes fall {
+                0% { opacity: 0.8; transform: translate(0, -10px) rotate(0deg) scale(0.8); }
+                50% { opacity: 0.9; transform: translate(100px, 50vh) rotate(180deg) scale(1.1); }
+                100% { opacity: 0; transform: translate(-50px, 105vh) rotate(360deg) scale(0.6); }
+            }
+
             /* CSS khi In / Export PDF */
             @media print {
                 body { background: white !important; padding: 0 !important; }
-                .chat-widget, .btn-bloom, .preset-btn, button, .toast-notification { display: none !important; }
+                #petal-container, .chat-widget, .btn-bloom, .preset-btn, button, .toast-notification { display: none !important; }
                 .bloom-card { box-shadow: none !important; border: 1px solid #ddd !important; }
             }
         </style>
     </head>
     <body>
 
+        <!-- Container Cánh hoa rơi background -->
+        <div id="petal-container"></div>
+
         <!-- Container Chính -->
-        <div class="container-fluid" style="max-width: 1400px;">
+        <div class="container-fluid" style="max-width: 1400px; position: relative; z-index: 2;">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <span class="badge rounded-pill px-3 py-1 mb-1" style="background: #fce7f3; color: #be185d; font-weight: 700;">🌸 AI Ultra Enterprise Suite v3.0</span>
+                    <span class="badge rounded-pill px-3 py-1 mb-1" style="background: #fce7f3; color: #be185d; font-weight: 700;">🌸 AI Ultra Enterprise Suite v3.5</span>
                     <h2 class="serif-title fw-bold text-dark m-0">Botanical Iris Intelligence Dashboard</h2>
                 </div>
                 <div class="d-flex gap-2">
@@ -269,6 +281,30 @@ def home():
         </div>
 
         <script>
+            // TẠO CÁNH HOA RƠI TỰ ĐỘNG
+            function createPetals() {
+                const container = document.getElementById('petal-container');
+                const petalCount = 28; // Số lượng cánh hoa rơi cùng lúc
+
+                for (let i = 0; i < petalCount; i++) {
+                    const petal = document.createElement('div');
+                    petal.classList.add('petal');
+                    
+                    // Ngẫu nhiên kích thước cánh hoa
+                    const width = Math.random() * 12 + 10;
+                    const height = width * (Math.random() * 0.6 + 1.2);
+                    petal.style.width = `${width}px`;
+                    petal.style.height = `${height}px`;
+
+                    // Ngẫu nhiên vị trí xuất phát & thời gian rơi
+                    petal.style.left = `${Math.random() * 100}vw`;
+                    petal.style.animationDuration = `${Math.random() * 6 + 6}s`; // 6s - 12s
+                    petal.style.animationDelay = `${Math.random() * 5}s`;
+                    
+                    container.appendChild(petal);
+                }
+            }
+
             const flowerImages = {
                 'SETOSA': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
                 'VERSICOLOR': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
@@ -419,7 +455,10 @@ def home():
             function exportData(type) { window.location.href = `/export/${type}`; }
             function exportPDFReport() { window.print(); }
 
-            window.onload = loadLogs;
+            window.onload = function() {
+                createPetals();
+                loadLogs();
+            };
         </script>
     </body>
     </html>
