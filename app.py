@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, JSONResponse
 from pydantic import BaseModel
 import joblib
 import numpy as np
-import sqlite3 
+import sqlite3
 import json
 import io
 import csv
@@ -11,9 +11,11 @@ from datetime import datetime
 
 app = FastAPI(title="Botanical Iris AI Ultra System")
 
+DB_FILE = "iris_enterprise.db"
+
 # 1. Khởi tạo Cơ sở dữ liệu SQLite
 def init_db():
-    conn = sqlite3.connect("iris_enterprise.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS predictions (
@@ -117,20 +119,8 @@ def home():
             .care-item-title { font-weight: 700; color: #9d174d; text-transform: uppercase; font-size: 0.72rem; margin-bottom: 2px; }
 
             /* Khu vực Upload Dropzone */
-            .upload-zone { border: 2px dashed #f472b6; border-radius: 16px; background: #fdf2f8; text-center; padding: 10px; cursor: pointer; transition: all 0.2s ease; }
+            .upload-zone { border: 2px dashed #f472b6; border-radius: 16px; background: #fdf2f8; text-align: center; padding: 10px; cursor: pointer; transition: all 0.2s ease; }
             .upload-zone:hover { background: #fce7f3; border-color: #be185d; }
-
-            /* Chatbot Widget AI */
-            .chat-widget { position: fixed; bottom: 25px; right: 25px; z-index: 9999; }
-            .chat-toggle-btn { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #a855f7, #f472b6); color: white; border: none; font-size: 1.6rem; box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4); cursor: pointer; }
-            .chat-box { width: 370px; height: 520px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border: 1px solid #fbcfe8; border-radius: 20px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15); display: none; flex-direction: column; overflow: hidden; position: absolute; bottom: 70px; right: 0; }
-            .chat-header { background: linear-gradient(135deg, #f472b6, #a855f7); color: white; padding: 12px 16px; font-weight: 700; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
-            .chat-body { flex: 1; padding: 12px; overflow-y: auto; font-size: 0.82rem; display: flex; flex-direction: column; gap: 8px; }
-            .chat-msg { max-width: 82%; padding: 8px 12px; border-radius: 14px; word-wrap: break-word; line-height: 1.4; }
-            .chat-msg.bot { background: #fdf2f8; color: #831843; border-bottom-left-radius: 2px; align-self: flex-start; }
-            .chat-msg.user { background: #a855f7; color: white; border-bottom-right-radius: 2px; align-self: flex-end; }
-            .chat-input-area { padding: 8px; border-top: 1px solid #fbcfe8; display: flex; gap: 6px; }
-            .chat-input { flex: 1; border: 1px solid #fbcfe8; border-radius: 12px; padding: 6px 10px; font-size: 0.82rem; outline: none; }
             
             #petal-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; overflow: hidden; }
             .petal { position: absolute; background: linear-gradient(135deg, #f472b6, #e879f9, #fbcfe8); opacity: 0.75; border-radius: 150% 0 150% 0; animation: fall linear infinite; }
@@ -325,6 +315,15 @@ def home():
                 probChart.data.datasets[0].data = result.probabilities;
                 probChart.update();
 
+                const anomalyBadge = document.getElementById('anomalyStatus');
+                if (result.is_anomaly) {
+                    anomalyBadge.className = 'badge bg-danger';
+                    anomalyBadge.innerText = 'BẤT THƯỜNG (ANOMALY)';
+                } else {
+                    anomalyBadge.className = 'badge bg-success';
+                    anomalyBadge.innerText = 'BÌNH THƯỜNG';
+                }
+
                 updateXAI(result.xai_contributions);
                 renderCareGuide(result.care_guide);
                 loadLogs();
@@ -387,15 +386,23 @@ def home():
                 const data = await res.json();
                 document.getElementById('logCount').innerText = `${data.total} ghi nhận`;
                 const tbody = document.getElementById('historyBody');
+                if(data.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Chưa có dữ liệu nào.</td></tr>';
+                    return;
+                }
                 tbody.innerHTML = data.data.slice(0, 6).map(item => `
                     <tr style="border-bottom: 1px solid #fdf2f8;">
                         <td class="fw-semibold text-muted">${item.timestamp}</td>
                         <td class="fw-bold" style="color: #701a75;">${item.input.sl} / ${item.input.sw} / ${item.input.pl} / ${item.input.pw}</td>
-                        <td><span class="badge rounded-pill px-3 py-1" style="background: #fce7f3; color: #be185d;">${item.prediction}</span></td>
+                        <td><span class="badge rounded-pill px-3 py-1" style="background: #fce7f3; color: #be185d;">${item.prediction.toUpperCase()}</span></td>
                         <td class="fw-bold text-success">${item.confidence}%</td>
                         <td><span class="badge ${item.is_anomaly ? 'bg-danger' : 'bg-success'}">${item.is_anomaly ? 'ANOMALY' : 'NORMAL'}</span></td>
                     </tr>
                 `).join('');
+            }
+
+            function exportData(format) {
+                window.open(`/export/${format}`, '_blank');
             }
 
             window.onload = function() { createPetals(); loadLogs(); };
@@ -410,18 +417,30 @@ def predict(data: IrisInput):
     sl, sw, pl, pw = data.sepal_length, data.sepal_width, data.petal_length, data.petal_width
     input_data = np.array([[sl, sw, pl, pw]])
     
-    prediction = 0
-    probs = [90.0, 5.0, 5.0]
+    species_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
+    
     if model is not None:
-        prediction = model.predict(input_data)[0]
+        prediction = int(model.predict(input_data)[0])
         if hasattr(model, "predict_proba"):
             raw_probs = model.predict_proba(input_data)[0]
             probs = [round(float(p) * 100, 1) for p in raw_probs]
+        else:
+            probs = [0.0, 0.0, 0.0]
+            probs[prediction] = 100.0
+    else:
+        # Fallback heuristic đơn giản dựa trên Petal Length nếu không có file model
+        if pl < 2.5:
+            prediction = 0
+            probs = [98.0, 1.5, 0.5]
+        elif pl < 4.8:
+            prediction = 1
+            probs = [2.0, 90.0, 8.0]
+        else:
+            prediction = 2
+            probs = [0.5, 10.5, 89.0]
 
     confidence = max(probs)
-    species_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
     result_name = species_map.get(prediction, 'setosa').lower()
-
     is_anomaly = check_anomaly(sl, sw, pl, pw)
 
     xai_contributions = {
@@ -434,7 +453,7 @@ def predict(data: IrisInput):
     care_guide = DETAILED_AI_CARE_GUIDE.get(result_name, DETAILED_AI_CARE_GUIDE['setosa'])
 
     # Lưu Database
-    conn = sqlite3.connect("iris_enterprise.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO predictions (timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
@@ -462,22 +481,19 @@ async def analyze_file(file: UploadFile = File(...)):
     image_preview_url = None
 
     try:
-        # 1. Nếu là file CSV
         if filename.endswith(".csv"):
             text = contents.decode("utf-8")
             reader = csv.reader(text.splitlines())
             rows = list(reader)
-            # Giả định lấy dòng dữ liệu đầu tiên có chứa số
             for row in rows:
                 try:
-                    vals = [float(x) for x in row if x.replace('.', '', 1).isdigit()]
+                    vals = [float(x) for x in row if x.replace('.', '', 1).replace('-', '', 1).isdigit()]
                     if len(vals) >= 4:
                         extracted_metrics = {"sepal_length": vals[0], "sepal_width": vals[1], "petal_length": vals[2], "petal_width": vals[3]}
                         break
                 except ValueError:
                     continue
 
-        # 2. Nếu là file JSON
         elif filename.endswith(".json"):
             data = json.loads(contents.decode("utf-8"))
             if isinstance(data, list) and len(data) > 0:
@@ -489,13 +505,11 @@ async def analyze_file(file: UploadFile = File(...)):
                 "petal_width": float(data.get("petal_width", 0.2))
             }
 
-        # 3. Nếu là Hình ảnh (Bổ sung xử lý Vision/AI Feature Extraction)
         elif filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
             import base64
             encoded_image = base64.b64encode(contents).decode('utf-8')
             image_preview_url = f"data:image/jpeg;base64,{encoded_image}"
 
-            # Giả lập mô hình Computer Vision ước tính chỉ số từ tỷ lệ điểm ảnh
             hash_val = sum(contents) % 3
             if hash_val == 0:
                 extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
@@ -518,7 +532,7 @@ async def analyze_file(file: UploadFile = File(...)):
 
 @app.get("/logs/db")
 def get_db_logs():
-    conn = sqlite3.connect("iris_enterprise.db")
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 50")
     rows = cursor.fetchall()
@@ -532,3 +546,39 @@ def get_db_logs():
             "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])
         })
     return {"total": len(logs), "data": logs}
+
+# Endpoint xuất file CSV / JSON cho nút xuất dữ liệu trên UI
+@app.get("/export/{format_type}")
+def export_data(format_type: str):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    if format_type.lower() == "json":
+        data = [
+            {
+                "id": r[0], "timestamp": r[1],
+                "sepal_length": r[2], "sepal_width": r[3],
+                "petal_length": r[4], "petal_width": r[5],
+                "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])
+            }
+            for r in rows
+        ]
+        return JSONResponse(content=data, headers={"Content-Disposition": "attachment; filename=iris_predictions.json"})
+
+    elif format_type.lower() == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Timestamp", "Sepal Length", "Sepal Width", "Petal Length", "Petal Width", "Prediction", "Confidence (%)", "Is Anomaly"])
+        for r in rows:
+            writer.writerow(r)
+        
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=iris_predictions.csv"}
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Định dạng xuất file không hợp lệ. Sử dụng 'csv' hoặc 'json'.")
