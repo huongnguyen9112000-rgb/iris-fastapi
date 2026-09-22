@@ -496,22 +496,30 @@ def predict(data: IrisInput):
         "care_guide": care_guide
     }
 
-# API Endpoint Chatbot tích hợp trực tiếp
+# API Endpoint Chatbot tích hợp trực tiếp Gemini API
 @app.post("/api/chat")
 def api_chat(query: ChatQuery):
-    msg = query.message.lower()
-    if "setosa" in msg:
-        reply = "Iris Setosa thích hợp với khí hậu ôn đới mát mẻ, đất chua nhẹ và cần giữ ẩm thường xuyên."
-    elif "versicolor" in msg:
-        reply = "Iris Versicolor ưa môi trường đầm lầy, ẩm ướt và cần lượng nước tưới dồi dào hằng ngày."
-    elif "virginica" in msg:
-        reply = "Iris Virginica chịu nhiệt và nắng toàn phần rất tốt, thích hợp đất mùn dày giàu dinh dưỡng."
-    elif "tưới" in msg or "nuoc" in msg:
-        reply = "Tùy thuộc vào loài hoa bạn đang trồng (Setosa thích ẩm nhẹ, Versicolor ưa đầm lầy, Virginica chịu hạn tốt hơn một chút), hãy đảm bảo đất không bị khô hoàn toàn."
-    else:
-        reply = f"AI Care Assistant đã ghi nhận câu hỏi: '{query.message}'. Bạn có thể hỏi sâu hơn về cách chăm sóc, nhiệt độ hoặc đặc tính từng loài Iris!"
-    
-    return {"reply": reply}
+    try:
+        from google import genai
+        client = genai.Client()
+        
+        prompt = f"""
+        Bạn là một trợ lý AI chuyên gia về thực vật học, chuyên tư vấn về các giống hoa Iris (Setosa, Versicolor, Virginica), 
+        cách chăm sóc, điều kiện đất đai và thời tiết. Hãy trả lời câu hỏi sau của người dùng một cách ngắn gọn, 
+        thân thiện và chính xác bằng tiếng Việt:
+        
+        Câu hỏi của người dùng: {query.message}
+        """
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        
+        return {"reply": response.text}
+        
+    except Exception as e:
+        return {"reply": f"Hệ thống AI đang gặp lỗi cấu hình hoặc thiếu API Key: {str(e)}"}
 
 # API Xử lý File Tải lên (CSV / JSON / Hình ảnh)
 @app.post("/analyze-file")
