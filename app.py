@@ -95,6 +95,7 @@ def home():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Iris Botanical AI Ultra // Enterprise Suite</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -115,9 +116,7 @@ def home():
             .flower-card-hero { position: relative; width: 100%; height: 180px; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 20px rgba(244, 114, 182, 0.15); border: 2px solid #fbcfe8; }
             .flower-img-preview { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
             .badge-confidence-hero { position: absolute; top: 10px; right: 10px; background: rgba(255, 255, 255, 0.92); color: #be185d; font-weight: 800; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
-            .care-item { background: #ffffff; border-left: 4px solid #f472b6; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.82rem; }
-            .care-item-title { font-weight: 700; color: #9d174d; text-transform: uppercase; font-size: 0.72rem; margin-bottom: 2px; }
-
+            
             /* Khu vực Upload Dropzone */
             .upload-zone { border: 2px dashed #f472b6; border-radius: 16px; background: #fdf2f8; text-align: center; padding: 10px; cursor: pointer; transition: all 0.2s ease; }
             .upload-zone:hover { background: #fce7f3; border-color: #be185d; }
@@ -208,17 +207,25 @@ def home():
                     </div>
                 </div>
 
-                <!-- Cột 3: Tư vấn AI Chi Tiết -->
+                <!-- Cột 3: AI Chatbox Tương tác (Thay thế Báo cáo tĩnh) -->
                 <div class="col-lg-5">
-                    <div class="bloom-card h-100">
+                    <div class="bloom-card h-100 d-flex flex-column">
                         <div class="d-flex align-items-center justify-content-between mb-2">
-                            <h6 class="serif-title fw-bold text-dark m-0">3. Báo cáo Tư vấn Chăm sóc AI</h6>
+                            <h6 class="serif-title fw-bold text-dark m-0"><i class="fas fa-comments text-pink"></i> 3. AI Chatbox Tư vấn Chăm sóc</h6>
                             <span class="badge bg-success" id="anomalyStatus">BÌNH THƯỜNG</span>
                         </div>
                         
-                        <div id="careReportContainer" style="max-height: 480px; overflow-y: auto;" class="pe-1">
-                            <div class="text-center text-muted py-5">
-                                🪴 <br>Nhập thông số hoặc tải file/ảnh để AI tự động xuất báo cáo.
+                        <!-- Khung Chat Tương Tác -->
+                        <div class="d-flex flex-column flex-grow-1" style="height: 420px;">
+                            <div id="chat-messages" class="flex-grow-1 overflow-auto p-3 mb-2 border rounded-4 bg-light" style="font-size: 0.88rem; max-height: 360px;">
+                                <div class="text-muted text-center small mb-3">💬 Hỏi AI về đặc tính sinh học, cách tưới nước hoặc bón phân cho loài hoa Iris...</div>
+                                <div class="p-2 mb-2 bg-white rounded-3 shadow-sm border border-pink-subtle">
+                                    <strong>🤖 AI Care Assistant:</strong> Xin chào! Tôi đã sẵn sàng hỗ trợ giải đáp thắc mắc về các giống hoa Iris. Bạn muốn tìm hiểu điều gì?
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="user-chat-input" class="form-control rounded-start-pill border-pink px-3" placeholder="Nhập câu hỏi cho AI..." onkeypress="handleChatKeyPress(event)">
+                                <button class="btn btn-bloom rounded-end-pill px-4 m-0" type="button" onclick="sendChatMessage()" style="width: auto;">Gửi</button>
                             </div>
                         </div>
                     </div>
@@ -325,7 +332,6 @@ def home():
                 }
 
                 updateXAI(result.xai_contributions);
-                renderCareGuide(result.care_guide);
                 loadLogs();
             }
 
@@ -367,18 +373,38 @@ def home():
                 document.getElementById('xaiContainer').innerHTML = html;
             }
 
-            function renderCareGuide(guide) {
-                if(!guide) return;
-                const html = `
-                    <div class="fw-bold text-dark mb-2" style="font-size: 0.9rem;">📌 ${guide.title}</div>
-                    <div class="care-item"><div class="care-item-title">🌤️ Khí hậu & Nhiệt độ</div><div>${guide.climate}</div></div>
-                    <div class="care-item"><div class="care-item-title">🌱 Đất trồng & Độ pH</div><div>${guide.soil}</div></div>
-                    <div class="care-item"><div class="care-item-title">☀️ Ánh sáng mặt trời</div><div>${guide.sunlight}</div></div>
-                    <div class="care-item"><div class="care-item-title">💧 Chế độ tưới nước</div><div>${guide.watering}</div></div>
-                    <div class="care-item"><div class="care-item-title">🧪 Phân bón & Dinh dưỡng</div><div>${guide.fertilizer}</div></div>
-                    <div class="care-item"><div class="care-item-title">🛡️ Phòng ngừa sâu bệnh</div><div>${guide.pest_note}</div></div>
-                `;
-                document.getElementById('careReportContainer').innerHTML = html;
+            // Xử lý gửi tin nhắn Chatbox
+            function handleChatKeyPress(event) {
+                if (event.key === 'Enter') {
+                    sendChatMessage();
+                }
+            }
+
+            async function sendChatMessage() {
+                const inputEl = document.getElementById('user-chat-input');
+                const chatContainer = document.getElementById('chat-messages');
+                const messageText = inputEl.value.trim();
+                if (!messageText) return;
+
+                // Thêm câu hỏi của user lên khung chat
+                chatContainer.innerHTML += `<div class="p-2 mb-2 bg-white rounded-3 shadow-sm border text-end"><strong>Bạn:</strong> ${messageText}</div>`;
+                inputEl.value = '';
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                try {
+                    const res = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: messageText })
+                    });
+                    const data = await res.json();
+
+                    // Thêm câu trả lời của AI
+                    chatContainer.innerHTML += `<div class="p-2 mb-2 bg-white rounded-3 shadow-sm border border-pink-subtle"><strong>🤖 AI Care Assistant:</strong> ${data.reply}</div>`;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                } catch (err) {
+                    chatContainer.innerHTML += `<div class="p-2 mb-2 bg-danger text-white rounded-3 shadow-sm">Lỗi kết nối đến máy chủ AI!</div>`;
+                }
             }
 
             async function loadLogs() {
@@ -428,7 +454,6 @@ def predict(data: IrisInput):
             probs = [0.0, 0.0, 0.0]
             probs[prediction] = 100.0
     else:
-        # Fallback heuristic đơn giản dựa trên Petal Length nếu không có file model
         if pl < 2.5:
             prediction = 0
             probs = [98.0, 1.5, 0.5]
@@ -470,6 +495,23 @@ def predict(data: IrisInput):
         "xai_contributions": xai_contributions,
         "care_guide": care_guide
     }
+
+# API Endpoint Chatbot tích hợp trực tiếp
+@app.post("/api/chat")
+def api_chat(query: ChatQuery):
+    msg = query.message.lower()
+    if "setosa" in msg:
+        reply = "Iris Setosa thích hợp với khí hậu ôn đới mát mẻ, đất chua nhẹ và cần giữ ẩm thường xuyên."
+    elif "versicolor" in msg:
+        reply = "Iris Versicolor ưa môi trường đầm lầy, ẩm ướt và cần lượng nước tưới dồi dào hằng ngày."
+    elif "virginica" in msg:
+        reply = "Iris Virginica chịu nhiệt và nắng toàn phần rất tốt, thích hợp đất mùn dày giàu dinh dưỡng."
+    elif "tưới" in msg or "nuoc" in msg:
+        reply = "Tùy thuộc vào loài hoa bạn đang trồng (Setosa thích ẩm nhẹ, Versicolor ưa đầm lầy, Virginica chịu hạn tốt hơn một chút), hãy đảm bảo đất không bị khô hoàn toàn."
+    else:
+        reply = f"AI Care Assistant đã ghi nhận câu hỏi: '{query.message}'. Bạn có thể hỏi sâu hơn về cách chăm sóc, nhiệt độ hoặc đặc tính từng loài Iris!"
+    
+    return {"reply": reply}
 
 # API Xử lý File Tải lên (CSV / JSON / Hình ảnh)
 @app.post("/analyze-file")
@@ -547,7 +589,6 @@ def get_db_logs():
         })
     return {"total": len(logs), "data": logs}
 
-# Endpoint xuất file CSV / JSON cho nút xuất dữ liệu trên UI
 @app.get("/export/{format_type}")
 def export_data(format_type: str):
     conn = sqlite3.connect(DB_FILE)
