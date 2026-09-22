@@ -511,8 +511,8 @@ def api_chat(query: ChatQuery):
         Câu hỏi của người dùng: {query.message}
         """
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
+       response = client.models.generate_content(
+            model='gemini-2.0-flash',
             contents=prompt
         )
         
