@@ -511,7 +511,7 @@ def api_chat(query: ChatQuery):
         Câu hỏi của người dùng: {query.message}
         """
         
-       response = client.models.generate_content(
+        response = client.models.generate_content(
             model='gemini-2.0-flash',
             contents=prompt
         )
@@ -519,8 +519,7 @@ def api_chat(query: ChatQuery):
         return {"reply": response.text}
         
     except Exception as e:
-        return {"reply": f"Hệ thống AI đang gặp lỗi cấu hình hoặc thiếu API Key: {str(e)}"}
-
+        return {"reply": f"Hệ thống AI đang gặp lỗi: {str(e)}"}
 # API Xử lý File Tải lên (CSV / JSON / Hình ảnh)
 @app.post("/analyze-file")
 async def analyze_file(file: UploadFile = File(...)):
