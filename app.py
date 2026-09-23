@@ -12,9 +12,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-from google import genai
-
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="9.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="10.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -55,19 +53,13 @@ def get_or_create_model():
 model = get_or_create_model()
 target_names = ['Setosa', 'Versicolor', 'Virginica']
 
-# --- 3. GOOGLE GEMINI AI ---
-try:
-    gemini_client = genai.Client()
-except Exception:
-    gemini_client = None
-
 class IrisInput(BaseModel):
     sepal_length: float
     sepal_width: float
     petal_length: float
     petal_width: float
 
-# --- 4. API ENDPOINTS ---
+# --- 3. API ENDPOINTS ---
 @app.post("/predict")
 def predict_iris(data: IrisInput):
     features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
@@ -80,17 +72,13 @@ def predict_iris(data: IrisInput):
     probabilities = [round(float(p) * 100, 1) for p in probs]
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    ai_report = "Hệ thống AI chưa được cấu hình khóa API."
-    if gemini_client:
-        try:
-            prompt = f"Phân tích loài hoa Iris {prediction} với các thông số: Sepal Length={data.sepal_length}, Sepal Width={data.sepal_width}, Petal Length={data.petal_length}, Petal Width={data.petal_width}. Hãy đưa ra tư vấn chuyên sâu, chuyên nghiệp về điều kiện sinh trưởng, loại đất và cách chăm sóc tối ưu bằng tiếng Việt."
-            response = gemini_client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=prompt
-            )
-            ai_report = response.text
-        except Exception as e:
-            ai_report = f"Lỗi gọi Gemini AI: {str(e)}"
+    # Báo cáo chuyên gia hệ thống tĩnh thay thế cho AI
+    reports = {
+        'Setosa': "• Đặc điểm sinh trưởng: Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5), giữ ẩm tốt.\n• Ánh sáng & Tưới nước: Ưa nắng bán phần (4-6 giờ/ngày). Tưới 2-3 lần/tuần, giữ đất luôn ẩm nhẹ.",
+        'Versicolor': "• Đặc điểm sinh trưởng: Phát triển mạnh ở môi trường đầm lầy, ven hồ, độ ẩm không khí cao.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ, chấp nhận ngập nước nhẹ (pH 5.5 - 7.0).\n• Ánh sáng & Tưới nước: Nắng toàn phần đến bán phần. Cần tưới đẫm nước thường xuyên.",
+        'Virginica': "• Đặc điểm sinh trưởng: Khả năng thích nghi tốt với thời tiết ấm áp, chịu nắng tốt.\n• Đất trồng: Đất phù sa, đất mùn ẩm dày, pH trung tính đến hơi kiềm (6.5 - 7.5).\n• Ánh sáng & Tưới nước: Yêu cầu nắng toàn phần (6-8 giờ/ngày) để củ phát triển khỏe mạnh."
+    }
+    ai_report = reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung của loài hoa Iris.")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(DB_FILE)
@@ -146,7 +134,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 5. GIAO DIỆN WEB ENTERPRISE DASHBOARD THỰC THỤ ---
+# --- 4. GIAO DIỆN WEB ENTERPRISE DASHBOARD ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -177,7 +165,7 @@ def get_dashboard():
                 <div>
                     <h1 class="font-extrabold text-slate-900 text-sm tracking-tight">Iris Botanical Intelligence</h1>
                     <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> System Operational
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> System Operational
                     </span>
                 </div>
             </div>
@@ -196,10 +184,10 @@ def get_dashboard():
         </div>
     </header>
 
-    <!-- NỘI DUNG CHÍNH (GRID LAYOUT CHUYÊN NGHIỆP) -->
+    <!-- NỘI DUNG CHÍNH -->
     <main class="max-w-7xl mx-auto px-6 py-6 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
         
-        <!-- CỘT TRÁI: FORM NHẬP THÔNG SỐ & MẪU NHANH (Col-4) -->
+        <!-- CỘT TRÁI: FORM NHẬP THÔNG SỐ & MẪU (Col-4) -->
         <section class="lg:col-span-4 space-y-6">
             <div class="glass-card p-5 rounded-2xl">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -231,7 +219,7 @@ def get_dashboard():
                     </div>
                     
                     <button type="submit" class="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-xl text-xs shadow-md shadow-pink-500/20 transition mt-2">
-                        Phân tích Machine Learning & AI
+                        Phân tích Machine Learning
                     </button>
                 </form>
             </div>
@@ -258,22 +246,22 @@ def get_dashboard():
             </div>
         </section>
 
-        <!-- CỘT PHẢI: BÁO CÁO CHĂM SÓC AI (Col-4) -->
+        <!-- CỘT PHẢI: BÁO CÁO CHĂM SÓC (Col-4) -->
         <section class="lg:col-span-4 space-y-6">
             <div class="glass-panel p-5 rounded-2xl h-full flex flex-col">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-sparkles text-pink-500"></i> Báo cáo Chăm sóc AI
+                        <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Cây
                     </h3>
-                    <span class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">Gemini 2.0</span>
+                    <span class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">Expert System</span>
                 </div>
                 <div id="aiReportContent" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[220px]">
-                    Hệ thống đã sẵn sàng. Nhấn nút phân tích để xem báo cáo chi tiết từ trợ lý AI.
+                    Hệ thống sẵn sàng. Nhấn phân tích để xem thông tin chi tiết và hướng dẫn chăm sóc.
                 </div>
             </div>
         </section>
 
-        <!-- BẢNG LỊCH SỬ DỮ LIỆU SQLITE (FULL WIDTH) -->
+        <!-- BẢNG LỊCH SỬ DỮ LIỆU SQLITE -->
         <section class="lg:col-span-12">
             <div class="glass-panel p-5 rounded-2xl">
                 <div class="flex justify-between items-center mb-4">
@@ -305,7 +293,7 @@ def get_dashboard():
 
     <!-- FOOTER -->
     <footer class="text-center py-4 text-xs text-slate-400 font-medium border-t border-slate-200 bg-white">
-        Iris Botanical Intelligence Suite &bull; FastAPI & Google Gemini AI
+        Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn
     </footer>
 
     <!-- JAVASCRIPT -->
@@ -395,7 +383,7 @@ def get_dashboard():
                 petal_width: parseFloat(document.getElementById('petal_width').value)
             };
 
-            document.getElementById('aiReportContent').innerText = "⏳ Đang phân tích mô hình ML và gọi Gemini AI tạo báo cáo...";
+            document.getElementById('aiReportContent').innerText = "⏳ Đang chạy phân tích Machine Learning...";
 
             try {
                 let res = await fetch('/predict', {
@@ -436,7 +424,6 @@ def get_dashboard():
             }
         });
 
-        // Tải logs lần đầu khi mở trang
         window.onload = function() {
             loadLogs();
         };
