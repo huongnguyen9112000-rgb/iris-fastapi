@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 from google import genai
 
-app = FastAPI(title="Iris Botanical App", version="7.0")
+app = FastAPI(title="Iris Botanical App", version="8.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -83,7 +83,7 @@ def predict_iris(data: IrisInput):
     ai_report = "Hệ thống AI chưa được cấu hình khóa API."
     if gemini_client:
         try:
-            prompt = f"Phân tích loài hoa Iris {prediction} với các thông số: Sepal Length={data.sepal_length}, Sepal Width={data.sepal_width}, Petal Length={data.petal_length}, Petal Width={data.petal_width}. Hãy đưa ra tư vấn ngắn gọn, chuyên nghiệp về điều kiện sinh trưởng và cách chăm sóc tối ưu bằng tiếng Việt."
+            prompt = f"Phân tích loài hoa Iris {prediction} với các thông số: Sepal Length={data.sepal_length}, Sepal Width={data.sepal_width}, Petal Length={data.petal_length}, Petal Width={data.petal_width}. Hãy đưa ra tư vấn chuyên sâu, chuyên nghiệp về điều kiện sinh trưởng, loại đất và cách chăm sóc tối ưu bằng tiếng Việt."
             response = gemini_client.models.generate_content(
                 model='gemini-2.0-flash',
                 contents=prompt
@@ -132,7 +132,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 5. GIAO DIỆN APP CAO CẤP (GLASSMORPHISM & iOS STYLE) ---
+# --- 5. GIAO DIỆN FULL DESKTOP DASHBOARD CAO CẤP ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -141,162 +141,142 @@ def get_dashboard():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iris Botanical App</title>
+    <title>Iris Botanical Enterprise Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: linear-gradient(135deg, #fbcfe8 0%, #e0e7ff 50%, #fef2f2 100%); min-height: 100vh; }
-        .glass-card { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.6); }
+        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.7); box-shadow: 0 10px 30px rgba(244,114,182,0.1); }
     </style>
 </head>
-<body class="flex items-center justify-center p-3 sm:p-6">
+<body class="flex flex-col min-h-screen text-gray-800">
 
-    <!-- KHUNG ỨNG DỤNG CHÍNH -->
-    <div class="w-full max-w-md bg-white/90 backdrop-blur-2xl rounded-[36px] shadow-[0_20px_50px_rgba(244,114,182,0.15)] border border-white/85 overflow-hidden flex flex-col h-[90vh] max-h-[880px] relative">
-        
-        <!-- APP HEADER -->
-        <div class="px-6 pt-5 pb-4 bg-white/50 backdrop-blur-md border-b border-gray-100 flex items-center justify-between z-10">
+    <!-- NAVBAR CHUYÊN NGHIỆP FULL MÀN HÌNH -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-pink-100 sticky top-0 z-40 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 text-white flex items-center justify-center shadow-lg shadow-pink-500/30">
                     <i class="fa-solid fa-seedling text-base"></i>
                 </div>
                 <div>
-                    <h1 class="font-extrabold text-gray-900 text-sm tracking-tight">Iris Botanical</h1>
+                    <h1 class="font-extrabold text-gray-900 text-base tracking-tight">Iris Botanical Intelligence</h1>
                     <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> AI Active
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Enterprise AI Active
                     </span>
                 </div>
             </div>
-            <button onclick="toggleMenuModal()" class="w-10 h-10 rounded-2xl bg-gray-100/80 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition shadow-sm">
-                <i class="fa-solid fa-ellipsis-vertical text-sm"></i>
-            </button>
-        </div>
-
-        <!-- MÀN HÌNH NỘI DUNG CUỘN -->
-        <div class="flex-grow overflow-y-auto p-5 space-y-4">
             
-            <!-- THẺ KẾT QUẢ CHÍNH -->
-            <div class="glass-card p-5 rounded-3xl shadow-sm relative overflow-hidden flex items-center gap-4">
-                <div class="absolute -right-10 -bottom-10 w-32 h-32 bg-pink-100/40 rounded-full blur-2xl pointer-events-none"></div>
-                <div class="w-24 h-24 rounded-2xl overflow-hidden bg-gray-100 flex-shrink-0 border-2 border-white shadow-md">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleInputModal()" class="px-4 py-2.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold rounded-xl text-xs transition border border-pink-200 flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-sliders"></i> Tùy chỉnh thông số
+                </button>
+                <div class="relative">
+                    <button onclick="toggleMenuDropdown()" class="px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-download"></i> Xuất dữ liệu <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </button>
+                    <div id="menuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
+                        <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
+                        <a href="/export/csv" class="block px-4 py-2.5 text-xs font-bold text-gray-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-csv mr-2 text-emerald-500"></i> Tải CSV</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- NỘI DUNG CHÍNH (3 CỘT RỘNG RÃI TRÊN MÁY TÍNH) -->
+    <main class="max-w-7xl mx-auto px-6 py-8 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
+        
+        <!-- CỘT 1: THẺ KẾT QUẢ & ẢNH (Col-4) -->
+        <section class="lg:col-span-4 space-y-6">
+            <div class="glass-panel p-6 rounded-3xl relative overflow-hidden flex flex-col items-center text-center">
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-pink-100/50 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="w-32 h-32 rounded-3xl overflow-hidden bg-gray-100 border-4 border-white shadow-lg mb-4">
                     <img id="resultImage" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="w-full h-full object-cover">
                 </div>
-                <div class="flex-grow z-10">
-                    <span id="anomalyBadge" class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">Bình thường</span>
-                    <h2 id="predClass" class="text-2xl font-black text-gray-900 mt-1 tracking-tight">Setosa</h2>
-                    <p class="text-xs text-gray-500 mt-0.5">Độ tin cậy: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
+                <span id="anomalyBadge" class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider mb-2">Bình thường</span>
+                <h2 id="predClass" class="text-3xl font-black text-gray-900 tracking-tight">Setosa</h2>
+                <p class="text-xs text-gray-500 mt-1">Độ tin cậy mô hình: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
+            </div>
+        </section>
+
+        <!-- CỘT 2: BIỂU ĐỒ XÁC SUẤT 3 LOÀI (Col-4) -->
+        <section class="lg:col-span-4 space-y-6">
+            <div class="glass-panel p-6 rounded-3xl h-full flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-pink-500"></i> Phân bố xác suất phân loại
+                    </h3>
+                    <div class="h-44 flex items-center justify-center">
+                        <canvas id="probChart"></canvas>
+                    </div>
                 </div>
             </div>
+        </section>
 
-            <!-- NÚT MỞ BẢNG NHẬP THÔNG SỐ -->
-            <button onclick="toggleInputModal()" class="w-full py-3.5 px-5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold rounded-2xl text-xs flex items-center justify-between transition shadow-lg shadow-pink-500/25">
-                <span class="flex items-center gap-2.5"><i class="fa-solid fa-sliders text-sm"></i> Tùy chỉnh thông số & Mẫu hoa</span>
-                <i class="fa-solid fa-chevron-right text-[10px] bg-white/20 p-1.5 rounded-lg"></i>
-            </button>
-
-            <!-- BIỂU ĐỒ XÁC SUẤT -->
-            <div class="glass-card p-4 rounded-3xl shadow-sm">
-                <div class="flex justify-between items-center mb-2">
-                    <p class="text-xs font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-pie text-pink-500"></i> Phân bố xác suất 3 loài
-                    </p>
-                </div>
-                <div class="h-28">
-                    <canvas id="probChart"></canvas>
-                </div>
-            </div>
-
-            <!-- BÁO CÁO CHĂM SÓC AI -->
-            <div class="glass-card p-4 rounded-3xl shadow-sm">
-                <div class="flex justify-between items-center mb-2">
-                    <p class="text-xs font-bold text-gray-800 flex items-center gap-2">
+        <!-- CỘT 3: BÁO CÁO CHĂM SÓC AI (Col-4) -->
+        <section class="lg:col-span-4 space-y-6">
+            <div class="glass-panel p-6 rounded-3xl h-full flex flex-col">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
                         <i class="fa-solid fa-sparkles text-pink-500"></i> Báo cáo Chăm sóc AI
-                    </p>
-                    <span class="text-[10px] text-pink-600 bg-pink-100/60 px-2.5 py-0.5 rounded-full font-bold">Gemini 2.0</span>
+                    </h3>
+                    <span class="text-[10px] text-pink-600 bg-pink-100/70 px-2.5 py-0.5 rounded-full font-bold">Gemini 2.0</span>
                 </div>
-                <div id="aiReportContent" class="text-xs text-gray-600 leading-relaxed max-h-40 overflow-y-auto whitespace-pre-line bg-white/70 p-3.5 rounded-2xl border border-gray-100 font-medium">
-                    Nhấn vào "Tùy chỉnh thông số" để hệ thống tiến hành phân tích Machine Learning và tạo báo cáo chăm sóc chi tiết từ AI.
+                <div id="aiReportContent" class="text-xs text-gray-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-white/70 p-4 rounded-2xl border border-gray-100 font-medium flex-grow min-h-[180px]">
+                    Nhấn vào nút "Tùy chỉnh thông số" phía trên để tiến hành phân tích Machine Learning và nhận báo cáo chăm sóc chi tiết từ AI.
                 </div>
             </div>
+        </section>
 
-        </div>
+    </main>
 
-        <!-- BOTTOM NAV BAR (THANH ĐIỀU HƯỚNG DƯỚI GIỐNG APP THẬT) -->
-        <div class="bg-white/80 backdrop-blur-xl border-t border-gray-100 px-6 py-3.5 flex justify-around items-center z-10">
-            <button onclick="location.reload()" class="flex flex-col items-center text-pink-600 gap-1 group">
-                <i class="fa-solid fa-house text-base transition group-hover:scale-110"></i>
-                <span class="text-[10px] font-bold">Trang chủ</span>
-            </button>
-            <button onclick="toggleInputModal()" class="flex flex-col items-center text-gray-400 hover:text-pink-600 gap-1 transition group">
-                <i class="fa-solid fa-sliders text-base transition group-hover:scale-110"></i>
-                <span class="text-[10px] font-semibold">Thông số</span>
-            </button>
-            <button onclick="toggleMenuModal()" class="flex flex-col items-center text-gray-400 hover:text-pink-600 gap-1 transition group">
-                <i class="fa-solid fa-cloud-arrow-down text-base transition group-hover:scale-110"></i>
-                <span class="text-[10px] font-semibold">Dữ liệu</span>
-            </button>
-        </div>
+    <!-- FOOTER -->
+    <footer class="text-center py-4 text-xs text-gray-500 font-medium">
+        Iris Botanical Intelligence Suite &bull; Powered by FastAPI & Google Gemini AI
+    </footer>
 
-        <!-- ================= MODAL 1: FORM NHẬP THÔNG SỐ (POPUP TRƯỢT TỪ DƯỚI LÊN) ================= -->
-        <div id="inputModal" class="hidden absolute inset-0 bg-black/40 backdrop-blur-sm z-50 flex flex-col justify-end transition-all">
-            <div class="bg-white rounded-t-[36px] p-6 space-y-4 max-h-[85vh] overflow-y-auto shadow-2xl animate-in fade-in slide-in-from-bottom duration-300">
-                <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                    <h3 class="font-extrabold text-sm text-gray-900">Cấu hình thông số & Mẫu hoa</h3>
-                    <button onclick="toggleInputModal()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">&times;</button>
+    <!-- ================= MODAL: CẤU HÌNH THÔNG SỐ (POPUP TRUNG TÂM) ================= -->
+    <div id="inputModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[32px] p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 class="font-extrabold text-sm text-gray-900">Tùy chỉnh thông số & Mẫu hoa</h3>
+                <button onclick="toggleInputModal()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">&times;</button>
+            </div>
+            
+            <!-- Nút chọn mẫu nhanh -->
+            <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="loadSample('setosa'); toggleInputModal();" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2.5 rounded-xl transition border border-pink-200">🌸 Setosa</button>
+                <button type="button" onclick="loadSample('versicolor'); toggleInputModal();" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2.5 rounded-xl transition border border-purple-200">🌷 Versicolor</button>
+                <button type="button" onclick="loadSample('virginica'); toggleInputModal();" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2.5 rounded-xl transition border border-rose-200">🌺 Virginica</button>
+            </div>
+
+            <form id="predictionForm" class="space-y-3 pt-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Sepal Length (cm)</label>
+                        <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Sepal Width (cm)</label>
+                        <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Petal Length (cm)</label>
+                        <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Petal Width (cm)</label>
+                        <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
+                    </div>
                 </div>
                 
-                <!-- Nút chọn mẫu nhanh -->
-                <div class="grid grid-cols-3 gap-2">
-                    <button type="button" onclick="loadSample('setosa'); toggleInputModal();" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2.5 rounded-2xl transition border border-pink-200">🌸 Setosa</button>
-                    <button type="button" onclick="loadSample('versicolor'); toggleInputModal();" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2.5 rounded-2xl transition border border-purple-200">🌷 Versicolor</button>
-                    <button type="button" onclick="loadSample('virginica'); toggleInputModal();" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2.5 rounded-2xl transition border border-rose-200">🌺 Virginica</button>
-                </div>
-
-                <form id="predictionForm" class="space-y-3 pt-1">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Sepal Length (cm)</label>
-                            <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Sepal Width (cm)</label>
-                            <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Petal Length (cm)</label>
-                            <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Petal Width (cm)</label>
-                            <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-transparent text-gray-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                    </div>
-                    
-                    <button type="submit" onclick="toggleInputModal()" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition mt-2">
-                        Xác nhận & Phân tích AI
-                    </button>
-                </form>
-            </div>
+                <button type="submit" onclick="toggleInputModal()" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition mt-2">
+                    Xác nhận & Phân tích AI
+                </button>
+            </form>
         </div>
-
-        <!-- ================= MODAL 2: MENU XUẤT DỮ LIỆU ================= -->
-        <div id="menuModal" class="hidden absolute inset-0 bg-black/40 backdrop-blur-sm z-50 flex flex-col justify-end">
-            <div class="bg-white rounded-t-[36px] p-6 space-y-3 shadow-2xl">
-                <div class="flex justify-between items-center border-b border-gray-100 pb-3">
-                    <h3 class="font-extrabold text-sm text-gray-900">Quản lý dữ liệu hệ thống</h3>
-                    <button onclick="toggleMenuModal()" class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center font-bold">&times;</button>
-                </div>
-                <a href="/export/json" class="block w-full py-3.5 px-4 bg-gray-50 hover:bg-pink-50 hover:text-pink-600 rounded-2xl text-xs font-bold text-gray-700 transition flex items-center gap-3 border border-gray-100">
-                    <i class="fa-solid fa-file-code text-pink-500 text-base"></i> Tải xuống lịch sử dạng JSON
-                </a>
-                <a href="/export/csv" class="block w-full py-3.5 px-4 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-600 rounded-2xl text-xs font-bold text-gray-700 transition flex items-center gap-3 border border-gray-100">
-                    <i class="fa-solid fa-file-csv text-emerald-500 text-base"></i> Tải xuống lịch sử dạng CSV
-                </a>
-            </div>
-        </div>
-
     </div>
 
     <!-- JAVASCRIPT XỬ LÝ -->
@@ -310,12 +290,24 @@ def get_dashboard():
             },
             options: {
                 plugins: { legend: { display: false } },
-                scales: { y: { max: 100, ticks: { display: false }, grid: { display: false } }, x: { grid: { display: false }, ticks: { font: { size: 11, weight: 'bold' } } } }
+                scales: { 
+                    y: { max: 100, ticks: { display: false }, grid: { display: false } }, 
+                    x: { grid: { display: false }, ticks: { font: { size: 12, weight: 'bold' } } } 
+                }
             }
         });
 
         function toggleInputModal() { document.getElementById('inputModal').classList.toggle('hidden'); }
-        function toggleMenuModal() { document.getElementById('menuModal').classList.toggle('hidden'); }
+        function toggleMenuDropdown() { document.getElementById('menuDropdown').classList.toggle('hidden'); }
+
+        window.onclick = function(event) {
+            if (!event.target.closest('button')) {
+                const dropdown = document.getElementById('menuDropdown');
+                if (dropdown && !dropdown.classList.contains('hidden')) {
+                    dropdown.classList.add('hidden');
+                }
+            }
+        }
 
         function loadSample(type) {
             const samples = {
@@ -346,7 +338,7 @@ def get_dashboard():
                 petal_width: parseFloat(document.getElementById('petal_width').value)
             };
 
-            document.getElementById('aiReportContent').innerText = "⏳ Đang kết nối mô hình ML và gọi Gemini AI...";
+            document.getElementById('aiReportContent').innerText = "⏳ Đang kết nối mô hình ML và gọi Gemini AI tạo báo cáo...";
 
             try {
                 let res = await fetch('/predict', {
@@ -370,10 +362,10 @@ def get_dashboard():
 
                 const badge = document.getElementById('anomalyBadge');
                 if (result.is_anomaly) {
-                    badge.className = "text-[10px] bg-amber-100 text-amber-800 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider";
+                    badge.className = "text-[10px] bg-amber-100 text-amber-800 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider";
                     badge.innerText = "Cảnh báo bất thường";
                 } else {
-                    badge.className = "text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider";
+                    badge.className = "text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider";
                     badge.innerText = "Bình thường";
                 }
 
