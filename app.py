@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="13.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="14.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -103,6 +103,8 @@ def predict_iris(data: IrisInput):
 
 @app.post("/diagnose")
 def diagnose_plant(data: DiagnosisInput):
+    query = data.symptom.lower()
+    
     knowledge_base = {
         "yellow_leaves": {
             "disease": "Bệnh Vàng lá do thừa nước hoặc úng rễ (Root Rot)",
@@ -119,13 +121,44 @@ def diagnose_plant(data: DiagnosisInput):
         "no_flowers": {
             "disease": "Hiện tượng không ra hoa do thiếu ánh sáng hoặc dư phân đạm",
             "solution": "Đảm bảo cây nhận đủ từ 6 tiếng nắng trực tiếp mỗi ngày. Giảm lượng phân bón có hàm lượng Đạm (N) cao, tăng cường Lân và Kali."
+        },
+        "rust": {
+            "disease": "Bệnh Gỉ sắt (Iris Rust)",
+            "solution": "Xuất hiện các mụn màu cam hoặc nâu đỏ trên lá. Cần cắt bỏ phần lá bệnh, phun thuốc trừ nấm chứa Mancozeb hoặc Hexaconazole."
+        },
+        "soft_rot": {
+            "disease": "Bệnh Thối mềm củ rễ (Bacterial Soft Rot)",
+            "solution": "Thường do vi khuẩn tấn công vết thương trên củ. Cắt bỏ phần củ bị nhũn, chấm vôi bột hoặc thuốc kháng sinh nông nghiệp vào vết cắt, phơi nắng nhẹ."
+        },
+        "white_bugs": {
+            "disease": "Rệp sáp hoặc bọ phấn trắng hại cây",
+            "solution": "Dùng vòi nước áp lực rửa trôi bớt rệp, sau đó phun dung dịch dầu khoáng kết hợp xà phòng sinh học hoặc thuốc trừ sâu lưu dẫn."
         }
     }
-    result = knowledge_base.get(data.symptom, {
-        "disease": "Triệu chứng tổng quát",
-        "solution": "Cần duy trì độ ẩm vừa phải, cung cấp đủ ánh sáng tự nhiên và kiểm tra sâu bệnh định kỳ hằng tuần."
-    })
-    return result
+
+    # Tìm kiếm thông minh nếu người dùng gõ từ khóa tự do
+    for key, val in knowledge_base.items():
+        if key in query or any(word in query for word in val["disease"].lower().split()):
+            return val
+
+    # Nếu gõ câu hỏi tự do mà không khớp key cứng, trả về phân tích thông minh dựa trên từ khóa tiếng Việt
+    if "vàng" in query or "úng" in query or "nước" in query:
+        return knowledge_base["yellow_leaves"]
+    elif "đốm" in query or "lá" in query or "đen" in query:
+        return knowledge_base["spots"]
+    elif "sâu" in query or "đục" in query or "thân" in query:
+        return knowledge_base["wilting"]
+    elif "hoa" in query or "nụ" in query:
+        return knowledge_base["no_flowers"]
+    elif "gỉ" in query or "cam" in query or "đỏ" in query:
+        return knowledge_base["rust"]
+    elif "mềm" in query or "nhũn" in query or "thối" in query:
+        return knowledge_base["soft_rot"]
+
+    return {
+        "disease": f"Phân tích chuyên gia cho yêu cầu: '{data.symptom}'",
+        "solution": "Triệu chứng bạn mô tả cần được theo dõi thêm độ ẩm đất và ánh sáng. Khuyên bạn nên vệ sinh gốc cây, cắt tỉa phần lá già héo úa và duy trì thông thoáng."
+    }
 
 @app.post("/analyze-file")
 async def analyze_file(file: UploadFile = File(...)):
@@ -217,7 +250,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB NÂNG CẤP (MULTI-PAGE VỚI CHẨN ĐOÁN BỆNH & THỐNG KÊ) ---
+# --- 4. GIAO DIỆN WEB NÂNG CẤP VỚI Ô HỎI BỆNH TỰ DO ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -240,7 +273,7 @@ def get_dashboard():
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
-    <!-- NAVBAR CHÍNH & MENU CHUYỂN TRANG -->
+    <!-- NAVBAR CHÍNH -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3.5 shadow-sm">
         <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div class="flex items-center space-x-3">
@@ -255,7 +288,6 @@ def get_dashboard():
                 </div>
             </div>
             
-            <!-- MENU CHỌN CHỨC NĂNG -->
             <nav class="flex items-center bg-slate-100 p-1 rounded-2xl gap-1 flex-wrap justify-center">
                 <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm">
                     <i class="fa-solid fa-chart-pie mr-1"></i> Dashboard
@@ -286,7 +318,7 @@ def get_dashboard():
     <!-- NỘI DUNG CÁC TRANG -->
     <main class="max-w-6xl mx-auto px-6 py-8 flex-grow w-full">
         
-        <!-- ================= TRANG 1: DASHBOARD ================= -->
+        <!-- TRANG 1: DASHBOARD -->
         <div id="tab-dashboard" class="tab-content active grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="space-y-6">
                 <div class="glass-card p-6 rounded-2xl flex flex-col items-center text-center">
@@ -323,7 +355,7 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- ================= TRANG 2: CẤU HÌNH & UPLOAD ================= -->
+        <!-- TRANG 2: CẤU HÌNH & UPLOAD -->
         <div id="tab-config" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -376,25 +408,40 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- ================= TRANG 3: CHẨN ĐOÁN BỆNH CÂY ================= -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & KHUNG ĐẶT CÂU HỎI TỰ DO -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh cây hoa Iris
                 </h3>
-                <p class="text-xs text-slate-500">Chọn triệu chứng bất thường quan sát được trên cây để hệ thống chuyên gia đưa ra phác đồ điều trị chính xác.</p>
                 
-                <div class="space-y-2">
-                    <button onclick="diagnose('yellow_leaves')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                <!-- Ô HỎI BỆNH TỰ DO -->
+                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập triệu chứng hoặc câu hỏi của bạn:</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="customSymptomInput" placeholder="Ví dụ: lá cây bị đốm vàng, sâu đục thân..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
+                        <button onclick="submitCustomDiagnosis()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Hỏi AI</button>
+                    </div>
+                </div>
+
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-2">Hoặc chọn nhanh triệu chứng phổ biến:</p>
+                <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    <button onclick="diagnose('yellow_leaves')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('spots')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('spots')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🦠 Xuất hiện đốm nâu hoặc đen trên bề mặt lá</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('wilting')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('wilting')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🐛 Cây héo rũ, thân có dấu hiệu bị đục lỗ</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('no_flowers')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('rust')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🟠 Bệnh gỉ sắt (mụn cam/đỏ nổi trên lá)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                    <button onclick="diagnose('soft_rot')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>💧 Bệnh thối mềm củ rễ (Soft Rot)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                    <button onclick="diagnose('no_flowers')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🌸 Cây phát triển tốt nhưng không chịu ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
                 </div>
@@ -404,13 +451,13 @@ def get_dashboard():
                 <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán & Phác đồ
                 </h3>
-                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[220px]">
-                    Vui lòng chọn triệu chứng ở bảng bên trái để nhận phác đồ điều trị từ chuyên gia.
+                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">
+                    Vui lòng chọn triệu chứng hoặc nhập câu hỏi ở bảng bên trái để nhận phác đồ điều trị từ chuyên gia.
                 </div>
             </div>
         </div>
 
-        <!-- ================= TRANG 4: LỊCH SỬ DATABASE ================= -->
+        <!-- TRANG 4: LỊCH SỬ DATABASE -->
         <div id="tab-logs" class="tab-content grid-cols-1 gap-6">
             <div class="glass-card p-6 rounded-2xl">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
@@ -569,6 +616,12 @@ def get_dashboard():
             } catch(e) {
                 document.getElementById('diagnosisResult').innerText = "❌ Lỗi hệ thống chẩn đoán.";
             }
+        }
+
+        function submitCustomDiagnosis() {
+            const text = document.getElementById('customSymptomInput').value.trim();
+            if(!text) return;
+            diagnose(text);
         }
 
         function updateUI(result) {
