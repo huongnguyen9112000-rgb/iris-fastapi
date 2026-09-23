@@ -11,9 +11,9 @@ from fastapi import FastAPI, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="16.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="17.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -25,6 +25,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS predictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
+            model_used TEXT,
             sepal_length REAL,
             sepal_width REAL,
             petal_length REAL,
@@ -39,22 +40,20 @@ def init_db():
 
 init_db()
 
-# --- 2. MÔ HÌNH MACHINE LEARNING ---
-MODEL_FILE = "iris_model.pkl"
+# --- 2. QUẢN LÝ CÁC MÔ HÌNH SVM THEO KERNEL ---
+AVAILABLE_KERNELS = ['linear', 'rbf', 'poly', 'sigmoid']
 
-def get_or_create_model():
-    if not os.path.exists(MODEL_FILE):
+def get_svm_model(kernel_name: str):
+    model_file = f"svm_{kernel_name}_model.pkl"
+    if not os.path.exists(model_file):
+        # Tự động train bù nếu thiếu file
         iris = load_iris()
-        X, y = iris.data, iris.target
-        model = RandomForestClassifier(n_estimators=100, random_state=42)
-        model.fit(X, y)
-        joblib.dump(model, MODEL_FILE)
-    return joblib.load(MODEL_FILE)
+        model = SVC(kernel=kernel_name, probability=True, random_state=42)
+        model.fit(iris.data, iris.target)
+        joblib.dump(model, model_file)
+    return joblib.load(model_file)
 
-model = get_or_create_model()
 target_names = ['Setosa', 'Versicolor', 'Virginica']
-
-# Biến toàn cục lưu trạng thái loài hoa gần nhất để phục vụ chẩn đoán bệnh theo loài
 latest_predicted_species = "Setosa"
 
 class IrisInput(BaseModel):
@@ -62,6 +61,7 @@ class IrisInput(BaseModel):
     sepal_width: float
     petal_length: float
     petal_width: float
+    kernel: str = "linear"
 
 class DiagnosisInput(BaseModel):
     symptom: str
@@ -70,6 +70,9 @@ class DiagnosisInput(BaseModel):
 @app.post("/predict")
 def predict_iris(data: IrisInput):
     global latest_predicted_species
+    kernel = data.kernel if data.kernel in AVAILABLE_KERNELS else "linear"
+    model = get_svm_model(kernel)
+
     features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     
     probs = model.predict_proba(features)[0]
@@ -77,26 +80,24 @@ def predict_iris(data: IrisInput):
     prediction = target_names[pred_idx]
     confidence = float(probs[pred_idx])
     
-    latest_predicted_species = prediction  # Cập nhật loài hoa hiện tại
-    
+    latest_predicted_species = prediction
     probabilities = [round(float(p) * 100, 1) for p in probs]
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    # Báo cáo chuyên sâu cá nhân hóa theo từng loài hoa
     species_reports = {
-        'Setosa': f"• Đặc điểm giống Setosa: Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt nhưng rất nhạy cảm nếu đất quá khô hạn.\n• Đất trồng tối ưu: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc riêng: Loài này có bộ rễ nông, cần duy trì độ ẩm bề mặt liên tục, tránh để chậu bị khô đất hoàn toàn.",
-        'Versicolor': f"• Đặc điểm giống Versicolor: Phát triển mạnh ở môi trường độ ẩm cao, ven hồ hoặc đầm lầy nhẹ.\n• Đất trồng tối ưu: Đất sét bùn, nhiều hữu cơ, giữ nước tốt (pH 5.5 - 7.0).\n• Chăm sóc riêng: Cần tưới đẫm nước thường xuyên hơn các loài khác, có thể chịu được ngập úng nhẹ trong thời gian ngắn.",
-        'Virginica': f"• Đặc điểm giống Virginica: Thích nghi cực tốt với điều kiện nắng ấm và cường độ ánh sáng cao.\n• Đất trồng tối ưu: Đất phù sa màu mỡ, thoát nước tốt, pH trung tính đến hơi kiềm (6.5 - 7.5).\n• Chăm sóc riêng: Ưa nắng toàn phần (6-8 giờ/ngày), cần không gian thông thoáng để tránh nấm bệnh phát triển do rậm rạp."
+        'Setosa': f"• Đặc điểm giống Setosa (Model SVM - {kernel.upper()}): Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc: Duy trì độ ẩm bề mặt liên tục, tránh để chậu khô hạn.",
+        'Versicolor': f"• Đặc điểm giống Versicolor (Model SVM - {kernel.upper()}): Phát triển mạnh ở môi trường độ ẩm cao, ven hồ.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ (pH 5.5 - 7.0).\n• Chăm sóc: Tưới đẫm nước thường xuyên, chịu được ngập úng nhẹ.",
+        'Virginica': f"• Đặc điểm giống Virginica (Model SVM - {kernel.upper()}): Thích nghi cực tốt với điều kiện nắng ấm.\n• Đất trồng: Đất phù sa màu mỡ, thoát nước tốt (pH 6.5 - 7.5).\n• Chăm sóc: Ưa nắng toàn phần (6-8 giờ/ngày)."
     }
-    ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung của loài hoa Iris.")
+    ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung.")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO predictions (timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (timestamp, data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
+        INSERT INTO predictions (timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (timestamp, f"SVM ({kernel})", data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
     conn.commit()
     conn.close()
 
@@ -105,7 +106,8 @@ def predict_iris(data: IrisInput):
         "confidence": confidence,
         "probabilities": probabilities,
         "is_anomaly": bool(is_anomaly),
-        "ai_report": ai_report
+        "ai_report": ai_report,
+        "model_used": f"SVM ({kernel})"
     }
 
 @app.post("/diagnose")
@@ -113,111 +115,45 @@ def diagnose_plant(data: DiagnosisInput):
     global latest_predicted_species
     query = data.symptom.lower().strip()
     
-    # Cơ sở tri thức các bệnh
     knowledge_base = {
-        "sâu": {
-            "name": "Sâu hại ăn lá & Sâu đục thân",
-            "solution": "Bắt sâu thủ công vào sáng sớm. Phun thuốc trừ sâu sinh học (Bt) hoặc dung dịch tỏi ớt."
-        },
-        "vàng": {
-            "name": "Bệnh Vàng lá do úng nước / Thối rễ",
-            "solution": f"Ngừng tưới nước ngay. Đối với giống {latest_predicted_species}, cần kiểm tra hệ thống thoát nước của chậu và bổ sung nấm đối kháng Trichoderma."
-        },
-        "đốm": {
-            "name": "Bệnh Đốm lá vi khuẩn / nấm",
-            "solution": "Cắt tỉa lá bệnh, tránh tưới nước lên tán lá vào ban đêm, phun thuốc trừ nấm gốc đồng định kỳ."
-        },
-        "gỉ": {
-            "name": "Bệnh Gỉ sắt (mụn cam/đỏ trên lá)",
-            "solution": "Tiêu hủy lá bị nặng, phun thuốc trừ nấm chuyên dụng chứa Mancozeb."
-        },
-        "thối": {
-            "name": "Bệnh Thối mềm củ rễ (Soft Rot)",
-            "solution": "Đào củ lên, cắt bỏ phần nhũn, sát trùng bằng vôi bột hoặc thuốc kháng sinh nông nghiệp."
-        },
-        "hoa": {
-            "name": "Hiện tượng không ra hoa",
-            "solution": f"Giống {latest_predicted_species} cần đủ nắng trực tiếp (6-8 tiếng/ngày). Giảm phân đạm, tăng cường lân và kali."
-        },
-        "khô": {
-            "name": "Hiện tượng khô héo / thiếu dinh dưỡng",
-            "solution": "Cung cấp đủ nước, bổ sung phân hữu cơ hoai mục và kiểm tra độ pH của đất."
-        }
+        "sâu": {"name": "Sâu hại ăn lá & Sâu đục thân", "solution": "Bắt sâu thủ công. Phun thuốc sinh học Bt hoặc dung dịch tỏi ớt."},
+        "vàng": {"name": "Bệnh Vàng lá do úng nước / Thối rễ", "solution": f"Ngừng tưới nước. Kiểm tra thoát nước cho giống {latest_predicted_species}, bổ sung nấm Trichoderma."},
+        "đốm": {"name": "Bệnh Đốm lá vi khuẩn / nấm", "solution": "Cắt tỉa lá bệnh, hạn chế tưới phun lên tán lá ban đêm, phun thuốc gốc đồng."},
+        "gỉ": {"name": "Bệnh Gỉ sắt", "solution": "Tiêu hủy lá bệnh nặng, phun thuốc chứa Mancozeb."},
+        "thối": {"name": "Bệnh Thối mềm củ rễ", "solution": "Đào củ, cắt phần nhũn, sát trùng bằng vôi bột."},
+        "hoa": {"name": "Hiện tượng không ra hoa", "solution": f"Giống {latest_predicted_species} cần đủ nắng (6-8h/ngày). Tăng cường lân và kali."}
     }
 
-    # Quét tất cả các từ khóa xuất hiện trong câu hỏi để trả về gộp nhiều bệnh nếu người dùng hỏi nhiều ý
-    matched_diseases = []
-    for keyword, info in knowledge_base.items():
-        if keyword in query:
-            matched_diseases.append(info)
-
-    # Nếu không khớp từ khóa cụ thể nào, phân tích chung
-    if not matched_diseases:
+    matched = [info for kw, info in knowledge_base.items() if kw in query]
+    if not matched:
         return {
             "disease": f"Phân tích chuyên gia cho giống {latest_predicted_species}",
-            "solution": f"Dựa trên câu hỏi '{data.symptom}': Cần kiểm tra độ ẩm đất, đảm bảo thông thoáng và ánh sáng tự nhiên phù hợp đặc tính sinh trưởng của giống hoa Iris {latest_predicted_species}."
+            "solution": f"Triệu chứng '{data.symptom}': Cần đảm bảo độ ẩm đất vừa phải và ánh sáng phù hợp cho giống {latest_predicted_species}."
         }
 
-    # Tổng hợp kết quả trả về nhiều bệnh nếu phát hiện nhiều từ khóa
-    combined_name = " + ".join([d["name"] for d in matched_diseases])
-    combined_solution = "\n\n".join([f"🔹 **{d['name']}**:\n{d['solution']}" for d in matched_diseases])
-
     return {
-        "disease": f"Phát hiện {len(matched_diseases)} vấn đề cho giống hoa {latest_predicted_species}: {combined_name}",
-        "solution": combined_solution
+        "disease": f"Phát hiện {len(matched)} vấn đề cho giống {latest_predicted_species}: " + " + ".join([d["name"] for d in matched]),
+        "solution": "\n\n".join([f"🔹 **{d['name']}**:\n{d['solution']}" for d in matched])
     }
 
 @app.post("/analyze-file")
 async def analyze_file(file: UploadFile = File(...)):
     filename = file.filename.lower()
     contents = await file.read()
-    
-    extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
+    extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2, "kernel": "linear"}
     image_preview_url = None
 
     try:
-        if filename.endswith(".csv"):
-            text = contents.decode("utf-8")
-            reader = csv.reader(text.splitlines())
-            for row in reader:
-                try:
-                    vals = [float(x) for x in row if x.replace('.', '', 1).replace('-', '', 1).isdigit()]
-                    if len(vals) >= 4:
-                        extracted_metrics = {"sepal_length": vals[0], "sepal_width": vals[1], "petal_length": vals[2], "petal_width": vals[3]}
-                        break
-                except ValueError:
-                    continue
-        elif filename.endswith(".json"):
-            data = json.loads(contents.decode("utf-8"))
-            if isinstance(data, list) and len(data) > 0:
-                data = data[0]
-            extracted_metrics = {
-                "sepal_length": float(data.get("sepal_length", 5.1)),
-                "sepal_width": float(data.get("sepal_width", 3.5)),
-                "petal_length": float(data.get("petal_length", 1.4)),
-                "petal_width": float(data.get("petal_width", 0.2))
-            }
-        elif filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
+        if filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
             import base64
             encoded = base64.b64encode(contents).decode('utf-8')
             image_preview_url = f"data:image/jpeg;base64,{encoded}"
             hash_val = sum(contents) % 3
-            if hash_val == 0:
-                extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
-            elif hash_val == 1:
-                extracted_metrics = {"sepal_length": 6.0, "sepal_width": 2.9, "petal_length": 4.5, "petal_width": 1.5}
-            else:
-                extracted_metrics = {"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 5.4, "petal_width": 2.1}
-        else:
-            return {"status": "ERROR", "message": "Định dạng file không hỗ trợ."}
+            if hash_val == 1: extracted_metrics = {"sepal_length": 6.0, "sepal_width": 2.9, "petal_length": 4.5, "petal_width": 1.5, "kernel": "linear"}
+            elif hash_val == 2: extracted_metrics = {"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 5.4, "petal_width": 2.1, "kernel": "linear"}
 
         res = predict_iris(IrisInput(**extracted_metrics))
-        return {
-            "status": "SUCCESS",
-            "extracted_metrics": extracted_metrics,
-            "image_preview": image_preview_url,
-            "prediction_result": res
-        }
+        return {"status": "SUCCESS", "extracted_metrics": extracted_metrics, "image_preview": image_preview_url, "prediction_result": res}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
 
@@ -225,39 +161,35 @@ async def analyze_file(file: UploadFile = File(...)):
 def get_logs():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
+    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
-    logs = [{
-        "id": r[0], "timestamp": r[1], 
-        "sepal_length": r[2], "sepal_width": r[3], "petal_length": r[4], "petal_width": r[5],
-        "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])
+    return [{
+        "id": r[0], "timestamp": r[1], "model_used": r[2],
+        "sepal_length": r[3], "sepal_width": r[4], "petal_length": r[5], "petal_width": r[6],
+        "prediction": r[7], "confidence": r[8], "is_anomaly": bool(r[9])
     } for r in rows]
-    return logs
 
 @app.get("/export/{format_type}")
 def export_data(format_type: str):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions")
+    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions")
     rows = cursor.fetchall()
     conn.close()
 
     if format_type == "json":
-        data = [{"id": r[0], "timestamp": r[1], "sepal_length": r[2], "sepal_width": r[3], "petal_length": r[4], "petal_width": r[5], "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])} for r in rows]
+        data = [{"id": r[0], "timestamp": r[1], "model": r[2], "sepal_length": r[3], "prediction": r[7]} for r in rows]
         return JSONResponse(content=data)
     elif format_type == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["ID", "Timestamp", "Sepal Length", "Sepal Width", "Petal Length", "Petal Width", "Prediction", "Confidence", "Is Anomaly"])
+        writer.writerow(["ID", "Timestamp", "Model", "Sepal L", "Sepal W", "Petal L", "Petal W", "Prediction", "Confidence", "Anomaly"])
         writer.writerows(rows)
-        response = Response(output.getvalue(), media_type="text/csv")
-        response.headers["Content-Disposition"] = "attachment; filename=iris_export.csv"
-        return response
-    else:
-        raise HTTPException(status_code=400, detail="Không hỗ trợ.")
+        return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_export.csv"})
+    raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB ---
+# --- 4. GIAO DIỆN WEB CÓ CHỌN KERNEL MODEL ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -266,7 +198,7 @@ def get_dashboard():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iris Botanical Enterprise Suite</title>
+    <title>Iris Botanical Enterprise Suite - Multi-Model SVM</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -280,7 +212,6 @@ def get_dashboard():
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
-    <!-- NAVBAR CHÍNH -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3.5 shadow-sm">
         <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div class="flex items-center space-x-3">
@@ -289,42 +220,30 @@ def get_dashboard():
                 </div>
                 <div>
                     <h1 class="font-extrabold text-slate-900 text-sm tracking-tight">Iris Botanical Intelligence</h1>
-                    <span class="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> System Operational
+                    <span id="activeModelBadge" class="text-[10px] text-pink-600 font-bold bg-pink-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-pink-500"></span> SVM Model: Linear
                     </span>
                 </div>
             </div>
             
             <nav class="flex items-center bg-slate-100 p-1 rounded-2xl gap-1 flex-wrap justify-center">
-                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm">
-                    <i class="fa-solid fa-chart-pie mr-1"></i> Dashboard
-                </button>
-                <button onclick="switchTab('config')" id="nav-config" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
-                    <i class="fa-solid fa-sliders mr-1"></i> Cấu hình & Upload
-                </button>
-                <button onclick="switchTab('diagnosis')" id="nav-diagnosis" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
-                    <i class="fa-solid fa-stethoscope mr-1"></i> Chẩn đoán bệnh
-                </button>
-                <button onclick="switchTab('logs')" id="nav-logs" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
-                    <i class="fa-solid fa-database mr-1"></i> Lịch sử
-                </button>
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm"><i class="fa-solid fa-chart-pie mr-1"></i> Dashboard</button>
+                <button onclick="switchTab('config')" id="nav-config" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900"><i class="fa-solid fa-sliders mr-1"></i> Cấu hình & Kernel</button>
+                <button onclick="switchTab('diagnosis')" id="nav-diagnosis" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900"><i class="fa-solid fa-stethoscope mr-1"></i> Chẩn đoán</button>
+                <button onclick="switchTab('logs')" id="nav-logs" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900"><i class="fa-solid fa-database mr-1"></i> Lịch sử</button>
             </nav>
 
             <div class="relative">
-                <button onclick="toggleDropdown()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-download"></i> Xuất file <i class="fa-solid fa-chevron-down text-[10px]"></i>
-                </button>
+                <button onclick="toggleDropdown()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm"><i class="fa-solid fa-download"></i> Xuất file <i class="fa-solid fa-chevron-down text-[10px]"></i></button>
                 <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50">
-                    <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
-                    <a href="/export/csv" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-csv mr-2 text-emerald-500"></i> Tải CSV</a>
+                    <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
+                    <a href="/export/csv" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-csv mr-2 text-emerald-500"></i> Tải CSV</a>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- NỘI DUNG CÁC TRANG -->
     <main class="max-w-6xl mx-auto px-6 py-8 flex-grow w-full">
-        
         <!-- TRANG 1: DASHBOARD -->
         <div id="tab-dashboard" class="tab-content active grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="space-y-6">
@@ -334,227 +253,147 @@ def get_dashboard():
                     </div>
                     <span id="anomalyBadge" class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">Bình thường</span>
                     <h2 id="predClass" class="text-2xl font-black text-slate-900 tracking-tight">Setosa</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Độ tin cậy mô hình: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
+                    <p class="text-xs text-slate-500 mt-0.5">Độ tin cậy: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
                 </div>
-
                 <div class="glass-card p-6 rounded-2xl">
-                    <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-chart-simple text-pink-500"></i> Phân bố xác suất 3 loài
-                    </h3>
-                    <div class="h-36">
-                        <canvas id="probChart"></canvas>
-                    </div>
+                    <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-chart-simple text-pink-500"></i> Phân bố xác suất 3 loài</h3>
+                    <div class="h-36"><canvas id="probChart"></canvas></div>
                 </div>
             </div>
-
             <div class="space-y-6">
                 <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Cây (Chuyên biệt theo loài)
-                        </h3>
-                        <span class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">Expert System</span>
+                        <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Chuyên biệt</h3>
+                        <span id="reportModelBadge" class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">SVM (linear)</span>
                     </div>
-                    <div id="aiReportContent" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[280px]">
-                        Hệ thống sẵn sàng. Bạn có thể chọn mẫu hoa hoặc cấu hình thông số ở tab "Cấu hình & Upload".
-                    </div>
+                    <div id="aiReportContent" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[280px]">Hệ thống sẵn sàng. Chọn cấu hình Kernel hoặc mẫu hoa để bắt đầu.</div>
                 </div>
             </div>
         </div>
 
-        <!-- TRANG 2: CẤU HÌNH & UPLOAD -->
+        <!-- TRANG 2: CẤU HÌNH & CHỌN KERNEL MODEL -->
         <div id="tab-config" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
-                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-sliders text-pink-500"></i> Cấu hình thông số & Mẫu hoa
-                </h3>
+                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-sliders text-pink-500"></i> Chọn SVM Kernel & Mẫu hoa</h3>
                 
-                <div class="grid grid-cols-3 gap-2">
-                    <button type="button" onclick="loadSample('setosa')" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2.5 rounded-xl transition border border-pink-200">🌸 Setosa</button>
-                    <button type="button" onclick="loadSample('versicolor')" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2.5 rounded-xl transition border border-purple-200">🌷 Versicolor</button>
-                    <button type="button" onclick="loadSample('virginica')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2.5 rounded-xl transition border border-rose-200">🌺 Virginica</button>
+                <!-- BỘ CHỌN KERNEL MODEL -->
+                <div class="space-y-1">
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase">Chọn Kernel Model (SVM):</label>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button type="button" onclick="setKernel('linear')" id="btn-kernel-linear" class="py-2 text-xs font-extrabold rounded-xl border transition bg-pink-500 text-white border-pink-500 shadow-sm">Linear</button>
+                        <button type="button" onclick="setKernel('rbf')" id="btn-kernel-rbf" class="py-2 text-xs font-bold rounded-xl border transition bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">RBF</button>
+                        <button type="button" onclick="setKernel('poly')" id="btn-kernel-poly" class="py-2 text-xs font-bold rounded-xl border transition bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">Poly</button>
+                        <button type="button" onclick="setKernel('sigmoid')" id="btn-kernel-sigmoid" class="py-2 text-xs font-bold rounded-xl border transition bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">Sigmoid</button>
+                    </div>
                 </div>
 
-                <form id="predictionForm" class="space-y-3 pt-2">
+                <div class="grid grid-cols-3 gap-2 pt-2">
+                    <button type="button" onclick="loadSample('setosa')" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2 rounded-xl border border-pink-200">🌸 Setosa</button>
+                    <button type="button" onclick="loadSample('versicolor')" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2 rounded-xl border border-purple-200">🌷 Versicolor</button>
+                    <button type="button" onclick="loadSample('virginica')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2 rounded-xl border border-rose-200">🌺 Virginica</button>
+                </div>
+
+                <form id="predictionForm" class="space-y-3 pt-1">
                     <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Length (cm)</label>
-                            <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Width (cm)</label>
-                            <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Length (cm)</label>
-                            <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
-                        </div>
-                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Width (cm)</label>
-                            <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
-                        </div>
+                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200"><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Length</label><input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent font-extrabold text-sm focus:outline-none"></div>
+                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200"><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Width</label><input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-transparent font-extrabold text-sm focus:outline-none"></div>
+                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200"><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Length</label><input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-transparent font-extrabold text-sm focus:outline-none"></div>
+                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200"><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Width</label><input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-transparent font-extrabold text-sm focus:outline-none"></div>
                     </div>
-                    
-                    <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition">
-                        Chạy Phân tích Machine Learning
-                    </button>
+                    <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition">Chạy Phân tích Model SVM</button>
                 </form>
             </div>
 
             <div class="glass-card p-6 rounded-2xl space-y-4">
-                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-cloud-arrow-up text-pink-500"></i> Phân tích qua File hoặc Hình ảnh
-                </h3>
-                <p class="text-xs text-slate-500">Tải lên file dữ liệu (CSV, JSON) hoặc hình ảnh hoa để hệ thống nhận diện và phân tích tự động.</p>
-                
+                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-pink-500"></i> Phân tích qua File hoặc Hình ảnh</h3>
+                <p class="text-xs text-slate-500">Tải lên hình ảnh hoa hoặc file để hệ thống nhận diện tự động bằng model SVM đang chọn.</p>
                 <div class="border-2 border-dashed border-pink-200 hover:border-pink-400 rounded-2xl p-8 text-center cursor-pointer transition bg-pink-50/50" onclick="document.getElementById('fileInput').click()">
                     <i class="fa-solid fa-image text-pink-400 text-3xl mb-2"></i>
-                    <p class="text-xs font-bold text-slate-700" id="uploadStatusText">Nhấn để tải lên file CSV, JSON hoặc Ảnh hoa</p>
+                    <p class="text-xs font-bold text-slate-700" id="uploadStatusText">Nhấn để tải lên file hoặc Ảnh hoa</p>
                     <input type="file" id="fileInput" accept=".csv, .json, image/*" class="hidden" onchange="handleFileUpload(event)">
                 </div>
             </div>
         </div>
 
-        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & TÌM KIẾM ĐA TRIỆU CHỨNG -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
-                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh (Hỗ trợ đa triệu chứng)
-                </h3>
-                
+                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh</h3>
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
-                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập gộp các triệu chứng của bạn (ví dụ: có sâu, lá bị vàng...):</label>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập gộp triệu chứng:</label>
                     <div class="flex gap-2">
                         <input type="text" id="customSymptomInput" placeholder="Nhập triệu chứng..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
-                        <button onclick="submitCustomDiagnosis()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Chẩn đoán</button>
+                        <button onclick="submitCustomDiagnosis()" class="bg-pink-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Hỏi</button>
                     </div>
                 </div>
-
-                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-2">Hoặc chọn nhanh triệu chứng phổ biến:</p>
-                <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
-                    <button onclick="diagnose('đốm')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🦠 Xuất hiện đốm nâu hoặc đen trên bề mặt lá</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
-                    <button onclick="diagnose('sâu')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🐛 Có sâu ăn lá hoặc thân bị đục</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
-                    <button onclick="diagnose('gỉ')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🟠 Bệnh gỉ sắt (mụn cam/đỏ nổi trên lá)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
-                    <button onclick="diagnose('thối')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>💧 Bệnh thối mềm củ rễ (Soft Rot)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
-                    <button onclick="diagnose('hoa')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🌸 Cây phát triển tốt nhưng không chịu ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
-                    </button>
+                <div class="space-y-2 max-h-[220px] overflow-y-auto">
+                    <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🍂 Lá bị úa vàng, thối gốc</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+                    <button onclick="diagnose('đốm')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🦠 Xuất hiện đốm nâu hoặc đen</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+                    <button onclick="diagnose('sâu')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🐛 Có sâu ăn lá hoặc đục thân</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
                 </div>
             </div>
-
             <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
-                <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán Chuyên gia
-                </h3>
-                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">
-                    Vui lòng chọn hoặc nhập triệu chứng bất thường ở bảng bên trái để nhận phác đồ điều trị chuyên biệt theo loài.
-                </div>
+                <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán</h3>
+                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">Chọn hoặc nhập triệu chứng bên trái.</div>
             </div>
         </div>
 
         <!-- TRANG 4: LỊCH SỬ DATABASE -->
         <div id="tab-logs" class="tab-content grid-cols-1 gap-6">
             <div class="glass-card p-6 rounded-2xl">
-                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
-                    <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-database text-pink-500"></i> Lịch sử dự đoán (SQLite Database)
-                    </h3>
-                    <div class="flex items-center gap-2 w-full sm:w-auto">
-                        <input type="text" id="logSearch" placeholder="Tìm kiếm theo loài..." oninput="filterLogs()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-pink-500 w-full sm:w-48">
-                        <button onclick="loadLogs()" class="text-xs text-pink-600 font-bold hover:underline whitespace-nowrap"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
-                    </div>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-database text-pink-500"></i> Lịch sử dự đoán (Ghi nhận Model Kernel)</h3>
+                    <button onclick="loadLogs()" class="text-xs text-pink-600 font-bold hover:underline"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
                 </div>
                 <div class="overflow-x-auto max-h-[400px]">
                     <table class="w-full text-left text-xs">
-                        <thead>
-                            <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase sticky top-0 bg-white">
-                                <th class="pb-2.5">Thời gian</th>
-                                <th class="pb-2.5">Thông số (SL/SW/PL/PW)</th>
-                                <th class="pb-2.5">Dự đoán</th>
-                                <th class="pb-2.5">Độ tin cậy</th>
-                                <th class="pb-2.5">Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logsTableBody" class="divide-y divide-slate-100 font-semibold text-slate-700">
-                            <tr><td colspan="5" class="py-4 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
-                        </tbody>
+                        <thead><tr class="border-b border-slate-200 text-slate-400 font-bold uppercase sticky top-0 bg-white"><th class="pb-2.5">Thời gian</th><th class="pb-2.5">Model SVM</th><th class="pb-2.5">Thông số</th><th class="pb-2.5">Dự đoán</th><th class="pb-2.5">Độ tin cậy</th></tr></thead>
+                        <tbody id="logsTableBody" class="divide-y divide-slate-100 font-semibold text-slate-700"><tr><td colspan="5" class="py-4 text-center text-slate-400">Đang tải...</td></tr></tbody>
                     </table>
                 </div>
             </div>
         </div>
-
     </main>
 
-    <!-- FOOTER -->
-    <footer class="text-center py-4 text-xs text-slate-400 font-medium border-t border-slate-200 bg-white">
-        Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn
-    </footer>
+    <footer class="text-center py-4 text-xs text-slate-400 font-medium border-t border-slate-200 bg-white">Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn SVM Multi-Kernel</footer>
 
-    <!-- JAVASCRIPT -->
     <script>
+        let selectedKernel = 'linear';
         let allLogs = [];
         const ctxProb = document.getElementById('probChart').getContext('2d');
         const probChart = new Chart(ctxProb, {
             type: 'bar',
-            data: {
-                labels: ['Setosa', 'Versicolor', 'Virginica'],
-                datasets: [{ data: [100, 0, 0], backgroundColor: ['#ec4899', '#a855f7', '#3b82f6'], borderRadius: 6 }]
-            },
-            options: {
-                plugins: { legend: { display: false } },
-                scales: { 
-                    y: { max: 100, ticks: { display: false }, grid: { display: false } }, 
-                    x: { grid: { display: false }, ticks: { font: { size: 11, weight: 'bold' } } } 
-                }
-            }
+            data: { labels: ['Setosa', 'Versicolor', 'Virginica'], datasets: [{ data: [100, 0, 0], backgroundColor: ['#ec4899', '#a855f7', '#3b82f6'], borderRadius: 6 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { max: 100, ticks: { display: false }, grid: { display: false } }, x: { grid: { display: false }, ticks: { font: { size: 11, weight: 'bold' } } } } }
         });
+
+        function setKernel(kernel) {
+            selectedKernel = kernel;
+            ['linear', 'rbf', 'poly', 'sigmoid'].forEach(k => {
+                const btn = document.getElementById('btn-kernel-' + k);
+                if(k === kernel) {
+                    btn.className = "py-2 text-xs font-extrabold rounded-xl border transition bg-pink-500 text-white border-pink-500 shadow-sm";
+                } else {
+                    btn.className = "py-2 text-xs font-bold rounded-xl border transition bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100";
+                }
+            });
+            document.getElementById('activeModelBadge').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-pink-500"></span> SVM Model: ${kernel.toUpperCase()}`;
+        }
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + tabId).classList.add('active');
-
             ['dashboard', 'config', 'diagnosis', 'logs'].forEach(id => {
                 const btn = document.getElementById('nav-' + id);
-                if (id === tabId) {
-                    btn.className = "px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm";
-                } else {
-                    btn.className = "px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900";
-                }
+                btn.className = (id === tabId) ? "px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm" : "px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900";
             });
-
-            if (tabId === 'logs') {
-                loadLogs();
-            }
+            if(tabId === 'logs') loadLogs();
         }
 
         function toggleDropdown() { document.getElementById('exportDropdown').classList.toggle('hidden'); }
 
-        window.onclick = function(event) {
-            if (!event.target.closest('button')) {
-                const dropdown = document.getElementById('exportDropdown');
-                if (dropdown && !dropdown.classList.contains('hidden')) {
-                    dropdown.classList.add('hidden');
-                }
-            }
-        }
-
         function loadSample(type) {
-            const samples = {
-                'setosa': [5.1, 3.5, 1.4, 0.2],
-                'versicolor': [6.0, 2.9, 4.5, 1.5],
-                'virginica': [6.5, 3.0, 5.8, 2.2]
-            };
+            const samples = { 'setosa': [5.1, 3.5, 1.4, 0.2], 'versicolor': [6.0, 2.9, 4.5, 1.5], 'virginica': [6.5, 3.0, 5.8, 2.2] };
             const val = samples[type];
             document.getElementById('sepal_length').value = val[0];
             document.getElementById('sepal_width').value = val[1];
@@ -563,98 +402,45 @@ def get_dashboard():
             document.getElementById('predictionForm').dispatchEvent(new Event('submit'));
         }
 
-        const sampleImages = {
-            'Setosa': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
-            'Versicolor': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
-            'Virginica': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
-        };
+        const sampleImages = { 'Setosa': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg', 'Versicolor': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg', 'Virginica': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg' };
 
         async function loadLogs() {
             try {
                 let res = await fetch('/logs');
                 allLogs = await res.json();
-                renderLogs(allLogs);
-            } catch(e) {
-                console.error("Lỗi tải logs:", e);
-            }
-        }
-
-        function renderLogs(logs) {
-            let tbody = document.getElementById('logsTableBody');
-            if(logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Không tìm thấy bản ghi nào.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = logs.map(item => `
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
-                    <td class="py-2.5 font-mono">${item.sepal_length} / ${item.sepal_width} / ${item.petal_length} / ${item.petal_width}</td>
-                    <td class="py-2.5 text-pink-600 font-extrabold">${item.prediction}</td>
-                    <td class="py-2.5 text-emerald-600 font-bold">${(item.confidence * 100).toFixed(1)}%</td>
-                    <td class="py-2.5">
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_anomaly ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
-                            ${item.is_anomaly ? 'Bất thường' : 'Bình thường'}
-                        </span>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function filterLogs() {
-            const query = document.getElementById('logSearch').value.toLowerCase();
-            const filtered = allLogs.filter(item => item.prediction.toLowerCase().includes(query));
-            renderLogs(filtered);
+                let tbody = document.getElementById('logsTableBody');
+                if(allLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi.</td></tr>'; return; }
+                tbody.innerHTML = allLogs.map(item => `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
+                        <td class="py-2.5 font-bold text-pink-600">${item.model_used}</td>
+                        <td class="py-2.5 font-mono">${item.sepal_length} / ${item.sepal_width} / ${item.petal_length} / ${item.petal_width}</td>
+                        <td class="py-2.5 text-slate-900 font-extrabold">${item.prediction}</td>
+                        <td class="py-2.5 text-emerald-600 font-bold">${(item.confidence * 100).toFixed(1)}%</td>
+                    </tr>
+                `).join('');
+            } catch(e) { console.error(e); }
         }
 
         async function diagnose(symptom) {
-            document.getElementById('diagnosisResult').innerText = "⏳ Đang tổng hợp phác đồ chuyên gia theo loài hoa...";
-            try {
-                let res = await fetch('/diagnose', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ symptom: symptom })
-                });
-                let data = await res.json();
-                document.getElementById('diagnosisResult').innerHTML = `
-                    <strong class="text-pink-600 text-sm block mb-2">🔍 Chẩn đoán: ${data.disease}</strong>
-                    <p class="text-slate-700 leading-relaxed font-semibold">💊 Phác đồ điều trị chuyên biệt:<br>${data.solution}</p>
-                `;
-            } catch(e) {
-                document.getElementById('diagnosisResult').innerText = "❌ Lỗi hệ thống chẩn đoán.";
-            }
+            document.getElementById('diagnosisResult').innerText = "⏳ Đang phân tích...";
+            let res = await fetch('/diagnose', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ symptom }) });
+            let data = await res.json();
+            document.getElementById('diagnosisResult').innerHTML = `<strong class="text-pink-600 text-sm block mb-2">🔍 ${data.disease}</strong><p class="font-semibold">${data.solution}</p>`;
         }
 
         function submitCustomDiagnosis() {
-            const text = document.getElementById('customSymptomInput').value.trim();
-            if(!text) return;
-            diagnose(text);
+            let val = document.getElementById('customSymptomInput').value.trim();
+            if(val) diagnose(val);
         }
 
         function updateUI(result) {
             document.getElementById('predClass').innerText = result.prediction;
             document.getElementById('predConf').innerText = (result.confidence * 100).toFixed(1) + '%';
-            
-            if (sampleImages[result.prediction]) {
-                document.getElementById('resultImage').src = sampleImages[result.prediction];
-            }
-
-            if(result.probabilities) {
-                probChart.data.datasets[0].data = result.probabilities;
-                probChart.update();
-            }
-
-            const badge = document.getElementById('anomalyBadge');
-            if (result.is_anomaly) {
-                badge.className = "text-[10px] bg-amber-100 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1";
-                badge.innerText = "Cảnh báo bất thường";
-            } else {
-                badge.className = "text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1";
-                badge.innerText = "Bình thường";
-            }
-
-            if(result.ai_report) {
-                document.getElementById('aiReportContent').innerText = result.ai_report;
-            }
+            document.getElementById('reportModelBadge').innerText = result.model_used;
+            if(sampleImages[result.prediction]) document.getElementById('resultImage').src = sampleImages[result.prediction];
+            if(result.probabilities) { probChart.data.datasets[0].data = result.probabilities; probChart.update(); }
+            if(result.ai_report) document.getElementById('aiReportContent').innerText = result.ai_report;
         }
 
         document.getElementById('predictionForm').addEventListener('submit', async function(e) {
@@ -663,55 +449,25 @@ def get_dashboard():
                 sepal_length: parseFloat(document.getElementById('sepal_length').value),
                 sepal_width: parseFloat(document.getElementById('sepal_width').value),
                 petal_length: parseFloat(document.getElementById('petal_length').value),
-                petal_width: parseFloat(document.getElementById('petal_width').value)
+                petal_width: parseFloat(document.getElementById('petal_width').value),
+                kernel: selectedKernel
             };
-
-            try {
-                let res = await fetch('/predict', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                });
-                let result = await res.json();
-                updateUI(result);
-                switchTab('dashboard');
-            } catch(err) {
-                alert("Lỗi kết nối đến máy chủ.");
-            }
+            let res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+            let result = await res.json();
+            updateUI(result);
+            switchTab('dashboard');
         });
 
         async function handleFileUpload(event) {
             const file = event.target.files[0];
-            if (!file) return;
-
-            document.getElementById('uploadStatusText').innerText = "Đang xử lý file/ảnh: " + file.name;
+            if(!file) return;
             const formData = new FormData();
             formData.append("file", file);
-
-            try {
-                let res = await fetch('/analyze-file', { method: 'POST', body: formData });
-                let data = await res.json();
-
-                if (data.status === "SUCCESS") {
-                    document.getElementById('sepal_length').value = data.extracted_metrics.sepal_length;
-                    document.getElementById('sepal_width').value = data.extracted_metrics.sepal_width;
-                    document.getElementById('petal_length').value = data.extracted_metrics.petal_length;
-                    document.getElementById('petal_width').value = data.extracted_metrics.petal_width;
-
-                    if (data.image_preview) {
-                        document.getElementById('resultImage').src = data.image_preview;
-                    }
-
-                    updateUI(data.prediction_result);
-                    document.getElementById('uploadStatusText').innerText = "✅ Phân tích thành công!";
-                    switchTab('dashboard');
-                } else {
-                    alert("Lỗi: " + data.message);
-                    document.getElementById('uploadStatusText').innerText = "❌ Lỗi đọc file";
-                }
-            } catch(e) {
-                alert("Lỗi kết nối xử lý file.");
-                document.getElementById('uploadStatusText').innerText = "❌ Lỗi hệ thống";
+            let res = await fetch('/analyze-file', { method: 'POST', body: formData });
+            let data = await res.json();
+            if(data.status === "SUCCESS") {
+                updateUI(data.prediction_result);
+                switchTab('dashboard');
             }
         }
     </script>
