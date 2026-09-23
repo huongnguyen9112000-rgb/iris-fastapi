@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="12.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="13.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -60,6 +60,9 @@ class IrisInput(BaseModel):
     petal_length: float
     petal_width: float
 
+class DiagnosisInput(BaseModel):
+    symptom: str
+
 # --- 3. API ENDPOINTS ---
 @app.post("/predict")
 def predict_iris(data: IrisInput):
@@ -98,7 +101,32 @@ def predict_iris(data: IrisInput):
         "ai_report": ai_report
     }
 
-# API Xử lý File tải lên hoặc Hình ảnh
+@app.post("/diagnose")
+def diagnose_plant(data: DiagnosisInput):
+    knowledge_base = {
+        "yellow_leaves": {
+            "disease": "Bệnh Vàng lá do thừa nước hoặc úng rễ (Root Rot)",
+            "solution": "Ngừng tưới nước ngay lập tức. Kiểm tra độ thoát nước của đất, cắt bỏ các rễ đã bị mục đen và bổ sung hoạt chất diệt nấm sinh học."
+        },
+        "spots": {
+            "disease": "Bệnh Đốm lá vi khuẩn / nấm (Leaf Spot)",
+            "solution": "Cắt tỉa các lá bị đốm nặng để tránh lây lan. Tránh tưới nước lên bề mặt lá vào chiều tối. Sử dụng thuốc gốc đồng phun định kỳ."
+        },
+        "wilting": {
+            "disease": "Sâu đục thân cây hoa Iris (Iris Borer)",
+            "solution": "Kiểm tra phần gốc và thân xem có lỗ đục hoặc ấu trùng sâu non không. Vệ sinh sạch sẽ lá khô quanh gốc vào cuối mùa thu."
+        },
+        "no_flowers": {
+            "disease": "Hiện tượng không ra hoa do thiếu ánh sáng hoặc dư phân đạm",
+            "solution": "Đảm bảo cây nhận đủ từ 6 tiếng nắng trực tiếp mỗi ngày. Giảm lượng phân bón có hàm lượng Đạm (N) cao, tăng cường Lân và Kali."
+        }
+    }
+    result = knowledge_base.get(data.symptom, {
+        "disease": "Triệu chứng tổng quát",
+        "solution": "Cần duy trì độ ẩm vừa phải, cung cấp đủ ánh sáng tự nhiên và kiểm tra sâu bệnh định kỳ hằng tuần."
+    })
+    return result
+
 @app.post("/analyze-file")
 async def analyze_file(file: UploadFile = File(...)):
     filename = file.filename.lower()
@@ -133,7 +161,6 @@ async def analyze_file(file: UploadFile = File(...)):
             import base64
             encoded = base64.b64encode(contents).decode('utf-8')
             image_preview_url = f"data:image/jpeg;base64,{encoded}"
-            # Mô phỏng trích xuất thông số dựa vào ảnh
             hash_val = sum(contents) % 3
             if hash_val == 0:
                 extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
@@ -144,7 +171,6 @@ async def analyze_file(file: UploadFile = File(...)):
         else:
             return {"status": "ERROR", "message": "Định dạng file không hỗ trợ."}
 
-        # Thực hiện dự đoán luôn với thông số trích xuất
         res = predict_iris(IrisInput(**extracted_metrics))
         return {
             "status": "SUCCESS",
@@ -159,7 +185,7 @@ async def analyze_file(file: UploadFile = File(...)):
 def get_logs():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC LIMIT 20")
+    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
     logs = [{
@@ -191,7 +217,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB ĐA TRANG (MULTI-PAGE / VIEW SWITCHING) ---
+# --- 4. GIAO DIỆN WEB NÂNG CẤP (MULTI-PAGE VỚI CHẨN ĐOÁN BỆNH & THỐNG KÊ) ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -229,16 +255,19 @@ def get_dashboard():
                 </div>
             </div>
             
-            <!-- MENU CHỌN CHỨC NĂNG (CÁC TAB TRANG) -->
-            <nav class="flex items-center bg-slate-100 p-1 rounded-2xl gap-1">
-                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-4 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm">
+            <!-- MENU CHỌN CHỨC NĂNG -->
+            <nav class="flex items-center bg-slate-100 p-1 rounded-2xl gap-1 flex-wrap justify-center">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm">
                     <i class="fa-solid fa-chart-pie mr-1"></i> Dashboard
                 </button>
-                <button onclick="switchTab('config')" id="nav-config" class="px-4 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
+                <button onclick="switchTab('config')" id="nav-config" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
                     <i class="fa-solid fa-sliders mr-1"></i> Cấu hình & Upload
                 </button>
-                <button onclick="switchTab('logs')" id="nav-logs" class="px-4 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
-                    <i class="fa-solid fa-database mr-1"></i> Lịch sử Database
+                <button onclick="switchTab('diagnosis')" id="nav-diagnosis" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
+                    <i class="fa-solid fa-stethoscope mr-1"></i> Chẩn đoán bệnh
+                </button>
+                <button onclick="switchTab('logs')" id="nav-logs" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900">
+                    <i class="fa-solid fa-database mr-1"></i> Lịch sử
                 </button>
             </nav>
 
@@ -254,12 +283,11 @@ def get_dashboard():
         </div>
     </header>
 
-    <!-- NỘI DUNG CÁC TRANG (VIEW SWITCHING) -->
+    <!-- NỘI DUNG CÁC TRANG -->
     <main class="max-w-6xl mx-auto px-6 py-8 flex-grow w-full">
         
-        <!-- ================= TRANG 1: DASHBOARD CHÍNH ================= -->
+        <!-- ================= TRANG 1: DASHBOARD ================= -->
         <div id="tab-dashboard" class="tab-content active grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <!-- Cột trái: Kết quả & Biểu đồ -->
             <div class="space-y-6">
                 <div class="glass-card p-6 rounded-2xl flex flex-col items-center text-center">
                     <div class="w-24 h-24 rounded-2xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-sm mb-3">
@@ -280,7 +308,6 @@ def get_dashboard():
                 </div>
             </div>
 
-            <!-- Cột phải: Báo cáo chăm sóc -->
             <div class="space-y-6">
                 <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                     <div class="flex justify-between items-center mb-3">
@@ -296,9 +323,8 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- ================= TRANG 2: CẤU HÌNH & UPLOAD FILE / ẢNH ================= -->
+        <!-- ================= TRANG 2: CẤU HÌNH & UPLOAD ================= -->
         <div id="tab-config" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <!-- Nhập thông số thủ công -->
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-sliders text-pink-500"></i> Cấu hình thông số & Mẫu hoa
@@ -336,12 +362,11 @@ def get_dashboard():
                 </form>
             </div>
 
-            <!-- Phân tích từ File / Hình ảnh -->
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-cloud-arrow-up text-pink-500"></i> Phân tích qua File hoặc Hình ảnh
                 </h3>
-                <p class="text-xs text-slate-500">Tải lên file dữ liệu (CSV, JSON) chứa thông số đặc trưng hoặc hình ảnh hoa để hệ thống nhận diện và phân tích tự động.</p>
+                <p class="text-xs text-slate-500">Tải lên file dữ liệu (CSV, JSON) hoặc hình ảnh hoa để hệ thống nhận diện và phân tích tự động.</p>
                 
                 <div class="border-2 border-dashed border-pink-200 hover:border-pink-400 rounded-2xl p-8 text-center cursor-pointer transition bg-pink-50/50" onclick="document.getElementById('fileInput').click()">
                     <i class="fa-solid fa-image text-pink-400 text-3xl mb-2"></i>
@@ -351,14 +376,51 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- ================= TRANG 3: LỊCH SỬ DATABASE ================= -->
+        <!-- ================= TRANG 3: CHẨN ĐOÁN BỆNH CÂY ================= -->
+        <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div class="glass-card p-6 rounded-2xl space-y-4">
+                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh cây hoa Iris
+                </h3>
+                <p class="text-xs text-slate-500">Chọn triệu chứng bất thường quan sát được trên cây để hệ thống chuyên gia đưa ra phác đồ điều trị chính xác.</p>
+                
+                <div class="space-y-2">
+                    <button onclick="diagnose('yellow_leaves')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                    <button onclick="diagnose('spots')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🦠 Xuất hiện đốm nâu hoặc đen trên bề mặt lá</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                    <button onclick="diagnose('wilting')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🐛 Cây héo rũ, thân có dấu hiệu bị đục lỗ</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                    <button onclick="diagnose('no_flowers')" class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🌸 Cây phát triển tốt nhưng không chịu ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
+                <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán & Phác đồ
+                </h3>
+                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[220px]">
+                    Vui lòng chọn triệu chứng ở bảng bên trái để nhận phác đồ điều trị từ chuyên gia.
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TRANG 4: LỊCH SỬ DATABASE ================= -->
         <div id="tab-logs" class="tab-content grid-cols-1 gap-6">
             <div class="glass-card p-6 rounded-2xl">
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
                     <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                         <i class="fa-solid fa-database text-pink-500"></i> Lịch sử dự đoán (SQLite Database)
                     </h3>
-                    <button onclick="loadLogs()" class="text-xs text-pink-600 font-bold hover:underline"><i class="fa-solid fa-rotate-right"></i> Làm mới dữ liệu</button>
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <input type="text" id="logSearch" placeholder="Tìm kiếm theo loài..." oninput="filterLogs()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-pink-500 w-full sm:w-48">
+                        <button onclick="loadLogs()" class="text-xs text-pink-600 font-bold hover:underline whitespace-nowrap"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto max-h-[400px]">
                     <table class="w-full text-left text-xs">
@@ -386,8 +448,9 @@ def get_dashboard():
         Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn
     </footer>
 
-    <!-- JAVASCRIPT XỬ LÝ ĐA TRANG VÀ API -->
+    <!-- JAVASCRIPT XỬ LÝ -->
     <script>
+        let allLogs = [];
         const ctxProb = document.getElementById('probChart').getContext('2d');
         const probChart = new Chart(ctxProb, {
             type: 'bar',
@@ -408,12 +471,12 @@ def get_dashboard():
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + tabId).classList.add('active');
 
-            ['dashboard', 'config', 'logs'].forEach(id => {
+            ['dashboard', 'config', 'diagnosis', 'logs'].forEach(id => {
                 const btn = document.getElementById('nav-' + id);
                 if (id === tabId) {
-                    btn.className = "px-4 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm";
+                    btn.className = "px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition bg-white text-pink-600 shadow-sm";
                 } else {
-                    btn.className = "px-4 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900";
+                    btn.className = "px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900";
                 }
             });
 
@@ -456,27 +519,55 @@ def get_dashboard():
         async function loadLogs() {
             try {
                 let res = await fetch('/logs');
-                let logs = await res.json();
-                let tbody = document.getElementById('logsTableBody');
-                if(logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi nào.</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = logs.map(item => `
-                    <tr class="hover:bg-slate-50 transition">
-                        <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
-                        <td class="py-2.5 font-mono">${item.sepal_length} / ${item.sepal_width} / ${item.petal_length} / ${item.petal_width}</td>
-                        <td class="py-2.5 text-pink-600 font-extrabold">${item.prediction}</td>
-                        <td class="py-2.5 text-emerald-600 font-bold">${(item.confidence * 100).toFixed(1)}%</td>
-                        <td class="py-2.5">
-                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_anomaly ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
-                                ${item.is_anomaly ? 'Bất thường' : 'Bình thường'}
-                            </span>
-                        </td>
-                    </tr>
-                `).join('');
+                allLogs = await res.json();
+                renderLogs(allLogs);
             } catch(e) {
                 console.error("Lỗi tải logs:", e);
+            }
+        }
+
+        function renderLogs(logs) {
+            let tbody = document.getElementById('logsTableBody');
+            if(logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Không tìm thấy bản ghi nào.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = logs.map(item => `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
+                    <td class="py-2.5 font-mono">${item.sepal_length} / ${item.sepal_width} / ${item.petal_length} / ${item.petal_width}</td>
+                    <td class="py-2.5 text-pink-600 font-extrabold">${item.prediction}</td>
+                    <td class="py-2.5 text-emerald-600 font-bold">${(item.confidence * 100).toFixed(1)}%</td>
+                    <td class="py-2.5">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.is_anomaly ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                            ${item.is_anomaly ? 'Bất thường' : 'Bình thường'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterLogs() {
+            const query = document.getElementById('logSearch').value.toLowerCase();
+            const filtered = allLogs.filter(item => item.prediction.toLowerCase().includes(query));
+            renderLogs(filtered);
+        }
+
+        async function diagnose(symptom) {
+            document.getElementById('diagnosisResult').innerText = "⏳ Đang phân tích triệu chứng chuyên gia...";
+            try {
+                let res = await fetch('/diagnose', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ symptom: symptom })
+                });
+                let data = await res.json();
+                document.getElementById('diagnosisResult').innerHTML = `
+                    <strong class="text-pink-600 text-sm block mb-2">🔍 Chẩn đoán: ${data.disease}</strong>
+                    <p class="text-slate-700 leading-relaxed font-semibold">💊 Phác đồ điều trị:<br>${data.solution}</p>
+                `;
+            } catch(e) {
+                document.getElementById('diagnosisResult').innerText = "❌ Lỗi hệ thống chẩn đoán.";
             }
         }
 
@@ -524,7 +615,7 @@ def get_dashboard():
                 });
                 let result = await res.json();
                 updateUI(result);
-                switchTab('dashboard'); // Chuyển về trang Dashboard xem kết quả
+                switchTab('dashboard');
             } catch(err) {
                 alert("Lỗi kết nối đến máy chủ.");
             }
@@ -554,7 +645,7 @@ def get_dashboard():
 
                     updateUI(data.prediction_result);
                     document.getElementById('uploadStatusText').innerText = "✅ Phân tích thành công!";
-                    switchTab('dashboard'); // Chuyển về trang Dashboard xem kết quả
+                    switchTab('dashboard');
                 } else {
                     alert("Lỗi: " + data.message);
                     document.getElementById('uploadStatusText').innerText = "❌ Lỗi đọc file";
