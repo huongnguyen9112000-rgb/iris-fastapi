@@ -1,23 +1,31 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse, Response, JSONResponse
-from pydantic import BaseModel
-import joblib
-import numpy as np
+import os
 import sqlite3
-import json
-import io
 import csv
+import io
 from datetime import datetime
+from typing import Optional
 
-app = FastAPI(title="Botanical Iris AI Ultra System")
+import numpy as np
+import joblib
+from fastapi import FastAPI, HTTPException, Response, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from sklearn.datasets import load_iris
+from sklearn.ensemble import RandomForestClassifier
 
-DB_FILE = "iris_enterprise.db"
+# Google GenAI SDK (Sử dụng thư viện google-genai mới nhất)
+from google import genai
+from google.genai import types
 
-# 1. Khởi tạo Cơ sở dữ liệu SQLite
+app = FastAPI(title="Botanical Iris AI Ultra System", version="4.0")
+
+# --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
+DB_FILE = "iris_system.db"
+
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS predictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
@@ -29,556 +37,404 @@ def init_db():
             confidence REAL,
             is_anomaly INTEGER
         )
-    """)
+    ''')
     conn.commit()
     conn.close()
 
 init_db()
 
-# Load Mô hình ML
-try:
-    model = joblib.load("svm_model.pkl")
-except Exception:
-    model = None
+# --- 2. MÔ HÌNH MACHINE LEARNING (Tự động train và lưu nếu chưa có) ---
+MODEL_FILE = "iris_model.pkl"
 
+def get_or_create_model():
+    if not os.path.exists(MODEL_FILE):
+        iris = load_iris()
+        X, y = iris.data, iris.target
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X, y)
+        joblib.dump(model, MODEL_FILE)
+    return joblib.load(MODEL_FILE)
+
+model = get_or_create_model()
+target_names = ['Setosa', 'Versicolor', 'Virginica']
+
+# --- 3. KHỞI TẠO GOOGLE GEMINI AI ---
+# Đảm bảo bạn đã thiết lập biến môi trường GEMINI_API_KEY trước khi chạy
+try:
+    gemini_client = genai.Client()
+except Exception as e:
+    gemini_client = None
+
+# --- PYDANTIC SCHEMAS ---
 class IrisInput(BaseModel):
     sepal_length: float
     sepal_width: float
     petal_length: float
     petal_width: float
 
-class ChatQuery(BaseModel):
+class ChatInput(BaseModel):
     message: str
 
-def check_anomaly(sl, sw, pl, pw):
-    if sl < 3.0 or sl > 9.0 or sw < 1.5 or sw > 5.0 or pl < 0.5 or pl > 8.0 or pw < 0.0 or pw > 3.5:
-        return True
-    return False
+# --- 4. CÁC API ENDPOINTS ---
 
-DETAILED_AI_CARE_GUIDE = {
-    'setosa': {
-        "title": "Iris Setosa (Diên vĩ Lông tơ / Bristle-pointed Iris)",
-        "climate": "Khí hậu ôn đới mát mẻ, xứ lạnh, chịu băng giá rất tốt.",
-        "soil": "Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5), giữ ẩm tốt nhưng thoát nước vừa phải.",
-        "sunlight": "Nắng bán phần (4-6 giờ nắng nhẹ/ngày). Tránh nắng gắt buổi trưa.",
-        "watering": "Tưới 2-3 lần/tuần. Giữ đất luôn ẩm nhẹ, không để khô hoàn toàn.",
-        "fertilizer": "Bón phân hữu cơ hoai mục hoặc NPK 10-10-10 tan chậm vào đầu mùa xuân.",
-        "pest_note": "Kháng bệnh tốt, chú ý kiểm tra ốc sên cắn lá mầm vào mùa mưa."
-    },
-    'versicolor': {
-        "title": "Iris Versicolor (Diên vĩ Xanh / Harlequin Blueflag)",
-        "climate": "Thích hợp môi trường đầm lầy, ven bờ hồ, độ ẩm không khí cao.",
-        "soil": "Đất sét bùn, nhiều hữu cơ, chấp nhận đất ngập nước nhẹ (pH 5.5 - 7.0).",
-        "sunlight": "Nắng toàn phần đến bán phần (ít nhất 6 giờ nắng/ngày để hoa đậm màu).",
-        "watering": "Cần nhiều nước. Có thể trồng nông dưới mực nước 3-5 cm hoặc tưới đẫm hằng ngày.",
-        "fertilizer": "Thêm bùn ao hoặc phân thủy sinh vào mùa sinh trưởng (tháng 3 - tháng 6).",
-        "pest_note": "Đặc biệt chú ý sâu bọ xòe lá (Iris borer) và rệp cây vào mùa hè."
-    },
-    'virginica': {
-        "title": "Iris Virginica (Diên vĩ Virginia / Virginia Blueflag)",
-        "climate": "Thích nghi tốt với thời tiết ấm áp, chịu nhiệt và chịu nắng tốt nhất.",
-        "soil": "Đất phù sa, đất mùn ẩm dầy, pH trung tính đến hơi kiềm (pH 6.5 - 7.5).",
-        "sunlight": "Nắng toàn phần (Direct Sun 6-8 giờ/ngày) giúp củ phát triển to khỏe.",
-        "watering": "Tưới nước trung bình. Chịu ngập nhẹ vào mùa mưa nhưng cần thoát nước tốt sau đó.",
-        "fertilizer": "Bón phân giàu Phốt pho (P) và Kali (K) trước mùa nở hoa 3 tuần.",
-        "pest_note": "Cắt tỉa lá già cuối mùa thu để tránh nấm đốm lá (Leaf Spot)."
-    }
-}
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-    return """
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Iris Botanical AI Ultra // Enterprise Suite</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-        <style>
-            :root { --bg-soft: #fdf8f6; --primary-pink: #f472b6; --text-dark: #1e293b; }
-            * { font-family: 'Plus Jakarta Sans', sans-serif; box-sizing: border-box; }
-            .serif-title { font-family: 'Playfair Display', serif; }
-            body { background: linear-gradient(135deg, #fdf8f6 0%, #fef2f2 40%, #f3e8ff 100%); color: var(--text-dark); min-height: 100vh; padding: 25px 15px; position: relative; overflow-x: hidden; }
-            .bloom-card { background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(20px); border: 1px solid rgba(244, 114, 182, 0.25); border-radius: 24px; padding: 22px; box-shadow: 0 12px 35px rgba(244, 114, 182, 0.08); margin-bottom: 20px; transition: transform 0.3s ease; position: relative; z-index: 2; }
-            .preset-btn { background: #fff; border: 1px solid #fbcfe8; color: #db2777; border-radius: 14px; padding: 6px 14px; font-weight: 600; font-size: 0.82rem; transition: all 0.2s ease; }
-            .preset-btn:hover { background: #fdf2f8; border-color: #f472b6; transform: translateY(-2px); }
-            .input-box-floral { background: #faf5f8; border: 1px solid #f5d0fe; border-radius: 16px; padding: 8px 14px; }
-            .input-box-floral label { font-size: 0.72rem; font-weight: 700; color: #a21caf; text-transform: uppercase; }
-            .form-control-floral { background: transparent; border: none; color: #701a75; font-weight: 700; font-size: 1rem; width: 100%; }
-            .form-control-floral:focus { outline: none; }
-            .btn-bloom { background: linear-gradient(135deg, #f472b6 0%, #a855f7 100%); border: none; color: white; font-weight: 700; border-radius: 18px; padding: 12px; width: 100%; font-size: 0.95rem; box-shadow: 0 8px 18px rgba(244, 114, 182, 0.3); transition: all 0.3s ease; }
-            .btn-bloom:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(244, 114, 182, 0.4); }
-            .flower-card-hero { position: relative; width: 100%; height: 180px; border-radius: 18px; overflow: hidden; box-shadow: 0 8px 20px rgba(244, 114, 182, 0.15); border: 2px solid #fbcfe8; }
-            .flower-img-preview { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
-            .badge-confidence-hero { position: absolute; top: 10px; right: 10px; background: rgba(255, 255, 255, 0.92); color: #be185d; font-weight: 800; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
-            .care-item { background: #ffffff; border-left: 4px solid #f472b6; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 0.82rem; }
-            .care-item-title { font-weight: 700; color: #9d174d; text-transform: uppercase; font-size: 0.72rem; margin-bottom: 2px; }
-
-            /* Khu vực Upload Dropzone */
-            .upload-zone { border: 2px dashed #f472b6; border-radius: 16px; background: #fdf2f8; text-align: center; padding: 10px; cursor: pointer; transition: all 0.2s ease; }
-            .upload-zone:hover { background: #fce7f3; border-color: #be185d; }
-            
-            #petal-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 1; overflow: hidden; }
-            .petal { position: absolute; background: linear-gradient(135deg, #f472b6, #e879f9, #fbcfe8); opacity: 0.75; border-radius: 150% 0 150% 0; animation: fall linear infinite; }
-            @keyframes fall {
-                0% { opacity: 0.8; transform: translate(0, -10px) rotate(0deg) scale(0.8); }
-                100% { opacity: 0; transform: translate(-50px, 105vh) rotate(360deg) scale(0.6); }
-            }
-        </style>
-    </head>
-    <body>
-
-        <div id="petal-container"></div>
-
-        <div class="container-fluid" style="max-width: 1400px; position: relative; z-index: 2;">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <span class="badge rounded-pill px-3 py-1 mb-1" style="background: #fce7f3; color: #be185d; font-weight: 700;">🌸 AI Ultra Enterprise Suite v4.0</span>
-                    <h2 class="serif-title fw-bold text-dark m-0">Botanical Iris Intelligence Dashboard</h2>
-                </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-secondary rounded-3 fw-bold" onclick="exportData('json')">📥 Export JSON</button>
-                    <button class="btn btn-sm btn-outline-success rounded-3 fw-bold" onclick="exportData('csv')">📊 Export CSV</button>
-                </div>
-            </div>
-
-            <div class="row g-3">
-                <!-- Cột 1: Form Nhập & Tải Lên File / Ảnh -->
-                <div class="col-lg-3">
-                    <div class="bloom-card h-100">
-                        <h6 class="serif-title fw-bold mb-3 text-dark">1. Thông số & Upload</h6>
-                        
-                        <!-- Preset Mẫu -->
-                        <div class="d-flex gap-1 mb-3 flex-wrap">
-                            <button class="preset-btn" onclick="setPreset(5.1, 3.5, 1.4, 0.2)">🌸 Setosa</button>
-                            <button class="preset-btn" onclick="setPreset(6.0, 2.9, 4.5, 1.5)">🌷 Versicolor</button>
-                            <button class="preset-btn" onclick="setPreset(6.9, 3.1, 5.4, 2.1)">🌺 Virginica</button>
-                        </div>
-
-                        <!-- Khối Upload File / Ảnh -->
-                        <div class="mb-3">
-                            <label class="small fw-bold text-uppercase text-secondary mb-1" style="font-size: 0.7rem;">Phân tích từ File / Hình ảnh:</label>
-                            <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-                                <span style="font-size: 1.2rem;">📁 📷</span>
-                                <div class="small fw-bold text-pink" id="uploadStatusText">Tải lên file CSV, JSON hoặc Ảnh hoa</div>
-                                <input type="file" id="fileInput" accept=".csv, .json, image/*" style="display: none;" onchange="handleFileUpload(event)">
-                            </div>
-                        </div>
-
-                        <form id="irisForm" class="d-flex flex-column gap-2">
-                            <div class="input-box-floral"><label>Sepal Length (cm)</label><input type="number" step="0.1" id="sl" class="form-control-floral" value="5.1"></div>
-                            <div class="input-box-floral"><label>Sepal Width (cm)</label><input type="number" step="0.1" id="sw" class="form-control-floral" value="3.5"></div>
-                            <div class="input-box-floral"><label>Petal Length (cm)</label><input type="number" step="0.1" id="pl" class="form-control-floral" value="1.4"></div>
-                            <div class="input-box-floral"><label>Petal Width (cm)</label><input type="number" step="0.1" id="pw" class="form-control-floral" value="0.2"></div>
-                            <button type="submit" class="btn-bloom mt-2">PHÂN TÍCH & TƯ VẤN AI 🌸</button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- Cột 2: Kết quả & Đồ thị Xác suất -->
-                <div class="col-lg-4">
-                    <div class="bloom-card h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <h6 class="serif-title fw-bold mb-2 text-dark">2. Phân loại & Xác suất ML</h6>
-                            <div class="flower-card-hero mb-2">
-                                <img id="flowerImg" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="flower-img-preview" alt="Iris">
-                                <span class="badge-confidence-hero" id="badgeConf">Match 0%</span>
-                            </div>
-                            <div class="text-center mb-2">
-                                <div class="small text-uppercase fw-bold text-muted" style="font-size: 0.72rem;">KẾT QUẢ DỰ ĐOÁN</div>
-                                <h4 id="targetClass" class="serif-title fw-bold m-0" style="color: #be185d;">SẴN SÀNG</h4>
-                            </div>
-                            <div class="p-2 rounded-3 mb-2" style="background: #faf5f8; border: 1px solid #f5d0fe;">
-                                <div class="small fw-bold text-uppercase mb-1" style="color: #a21caf; font-size: 0.72rem;">📊 Phân bố xác suất 3 loài:</div>
-                                <canvas id="probChart" style="max-height: 100px;"></canvas>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="p-2 rounded-4 mb-2" style="background: #faf5f8; border: 1px solid #f5d0fe;">
-                                <div class="small fw-bold text-uppercase mb-1" style="color: #a21caf; font-size: 0.72rem;">💡 XAI - Đóng góp chỉ số:</div>
-                                <div id="xaiContainer" class="small text-muted">Bấm phân tích để xem đóng góp.</div>
-                            </div>
-                            <button class="btn btn-outline-danger w-100 rounded-3 fw-bold py-1" style="font-size: 0.82rem;" onclick="window.print()">📄 Xuất Báo Cáo PDF A4</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Cột 3: Tư vấn AI Chi Tiết -->
-                <div class="col-lg-5">
-                    <div class="bloom-card h-100">
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <h6 class="serif-title fw-bold text-dark m-0">3. Báo cáo Tư vấn Chăm sóc AI</h6>
-                            <span class="badge bg-success" id="anomalyStatus">BÌNH THƯỜNG</span>
-                        </div>
-                        
-                        <div id="careReportContainer" style="max-height: 480px; overflow-y: auto;" class="pe-1">
-                            <div class="text-center text-muted py-5">
-                                🪴 <br>Nhập thông số hoặc tải file/ảnh để AI tự động xuất báo cáo.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Hàng Lịch Sử SQLite -->
-            <div class="row mt-2">
-                <div class="col-12">
-                    <div class="bloom-card">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="serif-title fw-bold text-dark m-0">📜 Lịch sử lưu trữ Database (SQLite)</h6>
-                            <span id="logCount" class="badge bg-secondary">0 ghi nhận</span>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-borderless align-middle m-0">
-                                <thead>
-                                    <tr style="border-bottom: 2px solid #fbcfe8; color: #a21caf; font-size: 0.8rem;">
-                                        <th>THỜI GIAN</th>
-                                        <th>THÔNG SỐ (SL / SW / PL / PW)</th>
-                                        <th>LOÀI DỰ ĐOÁN</th>
-                                        <th>ĐỘ TIN CẬY</th>
-                                        <th>TRẠNG THÁI</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="historyBody" class="small">
-                                    <tr><td colspan="5" class="text-muted text-center py-3">Chưa có dữ liệu nào.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            function createPetals() {
-                const container = document.getElementById('petal-container');
-                for (let i = 0; i < 20; i++) {
-                    const petal = document.createElement('div');
-                    petal.classList.add('petal');
-                    const width = Math.random() * 10 + 8;
-                    petal.style.width = `${width}px`;
-                    petal.style.height = `${width * 1.5}px`;
-                    petal.style.left = `${Math.random() * 100}vw`;
-                    petal.style.animationDuration = `${Math.random() * 5 + 5}s`;
-                    container.appendChild(petal);
-                }
-            }
-
-            const flowerImages = {
-                'SETOSA': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
-                'VERSICOLOR': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
-                'VIRGINICA': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
-            };
-
-            const ctxProb = document.getElementById('probChart').getContext('2d');
-            const probChart = new Chart(ctxProb, {
-                type: 'bar',
-                data: {
-                    labels: ['Setosa', 'Versicolor', 'Virginica'],
-                    datasets: [{ data: [0, 0, 0], backgroundColor: ['#f472b6', '#c084fc', '#60a5fa'], borderRadius: 8 }]
-                },
-                options: { plugins: { legend: { display: false } }, scales: { y: { max: 100, ticks: { display: false } } } }
-            });
-
-            function setPreset(sl, sw, pl, pw) {
-                document.getElementById('sl').value = sl; document.getElementById('sw').value = sw;
-                document.getElementById('pl').value = pl; document.getElementById('pw').value = pw;
-                runPrediction();
-            }
-
-            document.getElementById('irisForm').addEventListener('submit', (e) => { e.preventDefault(); runPrediction(); });
-
-            async function runPrediction() {
-                const sl = parseFloat(document.getElementById('sl').value);
-                const sw = parseFloat(document.getElementById('sw').value);
-                const pl = parseFloat(document.getElementById('pl').value);
-                const pw = parseFloat(document.getElementById('pw').value);
-
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sepal_length: sl, sepal_width: sw, petal_length: pl, petal_width: pw })
-                });
-
-                const result = await response.json();
-                const speciesName = result.prediction.toUpperCase();
-
-                document.getElementById('targetClass').innerText = speciesName;
-                document.getElementById('badgeConf').innerText = 'Match ' + result.confidence + '%';
-                if (flowerImages[speciesName]) document.getElementById('flowerImg').src = flowerImages[speciesName];
-
-                probChart.data.datasets[0].data = result.probabilities;
-                probChart.update();
-
-                const anomalyBadge = document.getElementById('anomalyStatus');
-                if (result.is_anomaly) {
-                    anomalyBadge.className = 'badge bg-danger';
-                    anomalyBadge.innerText = 'BẤT THƯỜNG (ANOMALY)';
-                } else {
-                    anomalyBadge.className = 'badge bg-success';
-                    anomalyBadge.innerText = 'BÌNH THƯỜNG';
-                }
-
-                updateXAI(result.xai_contributions);
-                renderCareGuide(result.care_guide);
-                loadLogs();
-            }
-
-            async function handleFileUpload(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                document.getElementById('uploadStatusText').innerText = "Đang xử lý: " + file.name;
-
-                const formData = new FormData();
-                formData.append("file", file);
-
-                const res = await fetch("/analyze-file", { method: "POST", body: formData });
-                const data = await res.json();
-
-                if (data.status === "SUCCESS") {
-                    document.getElementById('sl').value = data.extracted_metrics.sepal_length;
-                    document.getElementById('sw').value = data.extracted_metrics.sepal_width;
-                    document.getElementById('pl').value = data.extracted_metrics.petal_length;
-                    document.getElementById('pw').value = data.extracted_metrics.petal_width;
-
-                    if (data.image_preview) {
-                        document.getElementById('flowerImg').src = data.image_preview;
-                    }
-
-                    runPrediction();
-                    document.getElementById('uploadStatusText').innerText = "✅ Xử lý thành công!";
-                } else {
-                    alert("Lỗi: " + data.message);
-                    document.getElementById('uploadStatusText').innerText = "❌ Lỗi đọc file";
-                }
-            }
-
-            function updateXAI(contributions) {
-                let html = '';
-                for (const [key, val] of Object.entries(contributions)) {
-                    html += `<div class="d-flex justify-content-between align-items-center mb-1"><span>${key}:</span><span class="fw-bold text-success">+${val}%</span></div>`;
-                }
-                document.getElementById('xaiContainer').innerHTML = html;
-            }
-
-            function renderCareGuide(guide) {
-                if(!guide) return;
-                const html = `
-                    <div class="fw-bold text-dark mb-2" style="font-size: 0.9rem;">📌 ${guide.title}</div>
-                    <div class="care-item"><div class="care-item-title">🌤️ Khí hậu & Nhiệt độ</div><div>${guide.climate}</div></div>
-                    <div class="care-item"><div class="care-item-title">🌱 Đất trồng & Độ pH</div><div>${guide.soil}</div></div>
-                    <div class="care-item"><div class="care-item-title">☀️ Ánh sáng mặt trời</div><div>${guide.sunlight}</div></div>
-                    <div class="care-item"><div class="care-item-title">💧 Chế độ tưới nước</div><div>${guide.watering}</div></div>
-                    <div class="care-item"><div class="care-item-title">🧪 Phân bón & Dinh dưỡng</div><div>${guide.fertilizer}</div></div>
-                    <div class="care-item"><div class="care-item-title">🛡️ Phòng ngừa sâu bệnh</div><div>${guide.pest_note}</div></div>
-                `;
-                document.getElementById('careReportContainer').innerHTML = html;
-            }
-
-            async function loadLogs() {
-                const res = await fetch('/logs/db');
-                const data = await res.json();
-                document.getElementById('logCount').innerText = `${data.total} ghi nhận`;
-                const tbody = document.getElementById('historyBody');
-                if(data.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Chưa có dữ liệu nào.</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = data.data.slice(0, 6).map(item => `
-                    <tr style="border-bottom: 1px solid #fdf2f8;">
-                        <td class="fw-semibold text-muted">${item.timestamp}</td>
-                        <td class="fw-bold" style="color: #701a75;">${item.input.sl} / ${item.input.sw} / ${item.input.pl} / ${item.input.pw}</td>
-                        <td><span class="badge rounded-pill px-3 py-1" style="background: #fce7f3; color: #be185d;">${item.prediction.toUpperCase()}</span></td>
-                        <td class="fw-bold text-success">${item.confidence}%</td>
-                        <td><span class="badge ${item.is_anomaly ? 'bg-danger' : 'bg-success'}">${item.is_anomaly ? 'ANOMALY' : 'NORMAL'}</span></td>
-                    </tr>
-                `).join('');
-            }
-
-            function exportData(format) {
-                window.open(`/export/${format}`, '_blank');
-            }
-
-            window.onload = function() { createPetals(); loadLogs(); };
-        </script>
-    </body>
-    </html>
-    """
-
-# API Dự đoán chính từ thuộc tính
 @app.post("/predict")
-def predict(data: IrisInput):
-    sl, sw, pl, pw = data.sepal_length, data.sepal_width, data.petal_length, data.petal_width
-    input_data = np.array([[sl, sw, pl, pw]])
+def predict_iris(data: IrisInput):
+    features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     
-    species_map = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
+    # Dự đoán mô hình
+    probs = model.predict_proba(features)[0]
+    pred_idx = np.argmax(probs)
+    prediction = target_names[pred_idx]
+    confidence = float(probs[pred_idx])
     
-    if model is not None:
-        prediction = int(model.predict(input_data)[0])
-        if hasattr(model, "predict_proba"):
-            raw_probs = model.predict_proba(input_data)[0]
-            probs = [round(float(p) * 100, 1) for p in raw_probs]
-        else:
-            probs = [0.0, 0.0, 0.0]
-            probs[prediction] = 100.0
-    else:
-        # Fallback heuristic đơn giản dựa trên Petal Length nếu không có file model
-        if pl < 2.5:
-            prediction = 0
-            probs = [98.0, 1.5, 0.5]
-        elif pl < 4.8:
-            prediction = 1
-            probs = [2.0, 90.0, 8.0]
-        else:
-            prediction = 2
-            probs = [0.5, 10.5, 89.0]
+    # Kiểm tra dị thường (Ví dụ: kích thước cánh hoa quá ngắn/dài bất thường)
+    is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    confidence = max(probs)
-    result_name = species_map.get(prediction, 'setosa').lower()
-    is_anomaly = check_anomaly(sl, sw, pl, pw)
+    # Gọi Google Gemini AI để tạo báo cáo chăm sóc
+    ai_report = "Hệ thống AI đang offline hoặc chưa cấu hình GEMINI_API_KEY."
+    if gemini_client:
+        try:
+            prompt = f"Phân tích loài hoa Iris {prediction} với các thông số: Sepal Length={data.sepal_length}, Sepal Width={data.sepal_width}, Petal Length={data.petal_length}, Petal Width={data.petal_width}. Hãy đưa ra tư vấn ngắn gọn về điều kiện sinh trưởng, đất trồng, độ ẩm và cách chăm sóc tối ưu bằng tiếng Việt."
+            response = gemini_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompt
+            )
+            ai_report = response.text
+        except Exception as e:
+            ai_report = f"Lỗi gọi Gemini AI: {str(e)}"
 
-    xai_contributions = {
-        "Petal Length (Chiều dài cánh)": round(float((pl / 6.9) * 45), 1),
-        "Petal Width (Chiều rộng cánh)": round(float((pw / 2.5) * 35), 1),
-        "Sepal Length (Chiều dài đài)": round(float((sl / 7.9) * 12), 1),
-        "Sepal Width (Chiều rộng đài)": round(float((sw / 4.4) * 8), 1)
-    }
-
-    care_guide = DETAILED_AI_CARE_GUIDE.get(result_name, DETAILED_AI_CARE_GUIDE['setosa'])
-
-    # Lưu Database
+    # Lưu lịch sử vào SQLite
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute('''
         INSERT INTO predictions (timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), sl, sw, pl, pw, result_name.upper(), confidence, int(is_anomaly)))
+    ''', (timestamp, data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
     conn.commit()
     conn.close()
 
     return {
-        "prediction": result_name,
+        "prediction": prediction,
         "confidence": confidence,
-        "probabilities": probs,
-        "is_anomaly": is_anomaly,
-        "xai_contributions": xai_contributions,
-        "care_guide": care_guide
+        "is_anomaly": bool(is_anomaly),
+        "ai_report": ai_report
     }
 
-# API Xử lý File Tải lên (CSV / JSON / Hình ảnh)
-@app.post("/analyze-file")
-async def analyze_file(file: UploadFile = File(...)):
-    filename = file.filename.lower()
-    contents = await file.read()
-
-    extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
-    image_preview_url = None
-
+@app.post("/chat")
+def chat_with_assistant(data: ChatInput):
+    if not gemini_client:
+        return {"response": "Trợ lý AI chưa được cấu hình API Key. Vui lòng thiết lập biến môi trường GEMINI_API_KEY."}
     try:
-        if filename.endswith(".csv"):
-            text = contents.decode("utf-8")
-            reader = csv.reader(text.splitlines())
-            rows = list(reader)
-            for row in rows:
-                try:
-                    vals = [float(x) for x in row if x.replace('.', '', 1).replace('-', '', 1).isdigit()]
-                    if len(vals) >= 4:
-                        extracted_metrics = {"sepal_length": vals[0], "sepal_width": vals[1], "petal_length": vals[2], "petal_width": vals[3]}
-                        break
-                except ValueError:
-                    continue
-
-        elif filename.endswith(".json"):
-            data = json.loads(contents.decode("utf-8"))
-            if isinstance(data, list) and len(data) > 0:
-                data = data[0]
-            extracted_metrics = {
-                "sepal_length": float(data.get("sepal_length", 5.1)),
-                "sepal_width": float(data.get("sepal_width", 3.5)),
-                "petal_length": float(data.get("petal_length", 1.4)),
-                "petal_width": float(data.get("petal_width", 0.2))
-            }
-
-        elif filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
-            import base64
-            encoded_image = base64.b64encode(contents).decode('utf-8')
-            image_preview_url = f"data:image/jpeg;base64,{encoded_image}"
-
-            hash_val = sum(contents) % 3
-            if hash_val == 0:
-                extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2}
-            elif hash_val == 1:
-                extracted_metrics = {"sepal_length": 6.0, "sepal_width": 2.9, "petal_length": 4.5, "petal_width": 1.5}
-            else:
-                extracted_metrics = {"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 5.4, "petal_width": 2.1}
-
-        else:
-            return {"status": "ERROR", "message": "Định dạng file không hỗ trợ."}
-
-        return {
-            "status": "SUCCESS",
-            "extracted_metrics": extracted_metrics,
-            "image_preview": image_preview_url
-        }
-
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=f"Bạn là chuyên gia nông học, chuyên gia chăm sóc hoa và thực vật Iris. Hãy trả lời câu hỏi sau của người dùng bằng tiếng Việt một cách chuyên nghiệp, thân thiện: {data.message}"
+        )
+        return {"response": response.text}
     except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
+        return {"response": f"Đã xảy ra lỗi khi kết nối với Gemini: {str(e)}"}
 
-@app.get("/logs/db")
-def get_db_logs():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 50")
-    rows = cursor.fetchall()
-    conn.close()
-    
-    logs = []
-    for r in rows:
-        logs.append({
-            "id": r[0], "timestamp": r[1],
-            "input": {"sl": r[2], "sw": r[3], "pl": r[4], "pw": r[5]},
-            "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])
-        })
-    return {"total": len(logs), "data": logs}
-
-# Endpoint xuất file CSV / JSON cho nút xuất dữ liệu trên UI
 @app.get("/export/{format_type}")
 def export_data(format_type: str):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
+    cursor.execute("SELECT id, timestamp, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions")
     rows = cursor.fetchall()
     conn.close()
 
-    if format_type.lower() == "json":
-        data = [
-            {
+    if format_type == "json":
+        data = []
+        for r in rows:
+            data.append({
                 "id": r[0], "timestamp": r[1],
                 "sepal_length": r[2], "sepal_width": r[3],
                 "petal_length": r[4], "petal_width": r[5],
                 "prediction": r[6], "confidence": r[7], "is_anomaly": bool(r[8])
-            }
-            for r in rows
-        ]
-        return JSONResponse(content=data, headers={"Content-Disposition": "attachment; filename=iris_predictions.json"})
+            })
+        return JSONResponse(content=data)
 
-    elif format_type.lower() == "csv":
+    elif format_type == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["ID", "Timestamp", "Sepal Length", "Sepal Width", "Petal Length", "Petal Width", "Prediction", "Confidence (%)", "Is Anomaly"])
+        writer.writerow(["ID", "Timestamp", "Sepal Length", "Sepal Width", "Petal Length", "Petal Width", "Prediction", "Confidence", "Is Anomaly"])
         for r in rows:
             writer.writerow(r)
         
-        return Response(
-            content=output.getvalue(),
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=iris_predictions.csv"}
-        )
+        response = Response(output.getvalue(), media_type="text/csv")
+        response.headers["Content-Disposition"] = "attachment; filename=iris_predictions_export.csv"
+        return response
+
     else:
-        raise HTTPException(status_code=400, detail="Định dạng xuất file không hợp lệ. Sử dụng 'csv' hoặc 'json'.")
+        raise HTTPException(status_code=400, detail="Định dạng xuất không hỗ trợ (chỉ chấp nhận json hoặc csv).")
+
+# --- 5. GIAO DIỆN WEB DASHBOARD (Single Page Application hiện đại) ---
+@app.get("/", response_class=HTMLResponse)
+def get_dashboard():
+    return """
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Botanical Iris AI - Enterprise Suite</title>
+    <!-- Tailwind CSS & FontAwesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 182, 193, 0.3); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-pink-50 via-purple-50 to-rose-100 min-h-screen text-gray-800 flex flex-col">
+
+    <!-- NAVBAR CHUYÊN NGHIỆP -->
+    <header class="bg-white/85 backdrop-blur-md sticky top-0 z-50 border-b border-pink-100 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-tr from-pink-500 to-rose-400 text-white p-2.5 rounded-xl shadow-md">
+                    <i class="fa-solid fa-seedling text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-gray-900 tracking-tight text-base sm:text-lg">Iris Botanical AI</h1>
+                    <span class="text-[10px] text-pink-600 font-semibold bg-pink-50 px-2 py-0.5 rounded-full">Enterprise v4.0</span>
+                </div>
+            </div>
+
+            <!-- Menu Phải & Nút ẩn chức năng (Dropdown) -->
+            <div class="flex items-center space-x-3">
+                <!-- Nút Trợ lý AI (Mở Modal) -->
+                <button onclick="toggleChatModal()" class="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2">
+                    <i class="fa-solid fa-robot"></i> <span class="hidden sm:inline">Trợ lý AI</span>
+                </button>
+
+                <!-- Menu Dropdown Xuất Dữ Liệu -->
+                <div class="relative">
+                    <button onclick="toggleDropdown()" class="bg-gray-900 hover:bg-gray-800 text-white px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Xuất dữ liệu</span> <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </button>
+                    <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50">
+                        <a href="/export/json" class="block px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-code mr-2"></i> Tải JSON</a>
+                        <a href="/export/csv" class="block px-4 py-2 text-xs sm:text-sm text-gray-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-csv mr-2"></i> Tải CSV</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- NỘI DUNG CHÍNH -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-8 w-full items-start">
+        
+        <!-- CỘT TRÁI: THÔNG SỐ & MẪU NHANH -->
+        <section class="lg:col-span-5 space-y-6">
+            <div class="glass-panel p-6 rounded-2xl shadow-sm">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-pink-500"></i> Thông số & Mẫu nhanh
+                    </h2>
+                    <div class="flex gap-1.5">
+                        <button type="button" onclick="loadSample('setosa')" class="text-[11px] bg-pink-50 hover:bg-pink-100 text-pink-700 font-semibold px-2.5 py-1 rounded-lg transition">Setosa</button>
+                        <button type="button" onclick="loadSample('versicolor')" class="text-[11px] bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold px-2.5 py-1 rounded-lg transition">Versicolor</button>
+                        <button type="button" onclick="loadSample('virginica')" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold px-2.5 py-1 rounded-lg transition">Virginica</button>
+                    </div>
+                </div>
+
+                <!-- Form nhập liệu chính -->
+                <form id="predictionForm" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Sepal Length (cm)</label>
+                            <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-white/70 border border-pink-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Sepal Width (cm)</label>
+                            <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-white/70 border border-pink-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Petal Length (cm)</label>
+                            <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-white/70 border border-pink-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 font-medium">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-gray-600 uppercase mb-1">Petal Width (cm)</label>
+                            <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-white/70 border border-pink-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 font-medium">
+                        </div>
+                    </div>
+
+                    <!-- Upload file thu gọn -->
+                    <div class="border-2 border-dashed border-pink-200 hover:border-pink-400 rounded-xl p-3 text-center cursor-pointer transition bg-white/40">
+                        <input type="file" id="fileUpload" class="hidden">
+                        <label for="fileUpload" class="cursor-pointer flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-cloud-arrow-up text-pink-400 text-base"></i>
+                            <span class="text-xs font-medium text-gray-600">Tải lên file hoặc hình ảnh hoa</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-2.5 rounded-xl text-sm shadow-md transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Phân loại & Phân tích AI
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- CỘT PHẢI: KẾT QUẢ & BÁO CÁO AI -->
+        <section class="lg:col-span-7 space-y-6">
+            <!-- Kết quả ML -->
+            <div class="glass-panel p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center gap-6">
+                <div class="w-28 h-28 flex-shrink-0 bg-pink-100/50 rounded-2xl flex items-center justify-center overflow-hidden border border-pink-200">
+                    <img id="resultImage" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" alt="Iris" class="object-cover w-full h-full">
+                </div>
+                <div class="flex-grow text-center sm:text-left">
+                    <span id="anomalyBadge" class="inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-1 rounded-full mb-1">BÌNH THƯỜNG</span>
+                    <h3 class="text-[11px] uppercase tracking-wider text-gray-500 font-bold">Kết quả dự đoán mô hình</h3>
+                    <p id="predClass" class="text-2xl font-black text-gray-900 mt-0.5">Setosa</p>
+                    <p class="text-xs text-gray-600 mt-1">Độ tin cậy: <span id="predConf" class="font-bold text-pink-600">99.8%</span></p>
+                </div>
+            </div>
+
+            <!-- Báo cáo chăm sóc AI -->
+            <div class="glass-panel p-6 rounded-2xl shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Tư vấn Chăm sóc AI
+                    </h3>
+                    <span class="text-[11px] text-pink-600 bg-pink-50 px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1"><i class="fa-solid fa-sparkles"></i> Gemini 2.0 Flash</span>
+                </div>
+                <div id="aiReportContent" class="text-xs sm:text-sm text-gray-700 bg-white/60 p-4 rounded-xl border border-pink-100 min-h-[120px] leading-relaxed whitespace-pre-line">
+                    Nhấn "Phân loại & Phân tích AI" để AI tự động xuất báo cáo chi tiết về điều kiện sinh trưởng, đặc điểm hình thái và phương pháp chăm sóc loài hoa này.
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- CHAT MODAL (Ẩn sẵn, hiện khi bấm nút Trợ lý AI) -->
+    <div id="chatModal" class="hidden fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[520px]">
+            <div class="bg-gradient-to-r from-pink-500 to-rose-500 p-4 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm flex items-center gap-2"><i class="fa-solid fa-robot"></i> Trợ lý Chăm sóc Cây trồng</h3>
+                <button onclick="toggleChatModal()" class="text-white hover:text-pink-100 text-lg font-bold px-1">&times;</button>
+            </div>
+            <div id="chatMessages" class="flex-grow p-4 overflow-y-auto space-y-3 text-xs sm:text-sm bg-gray-50">
+                <div class="bg-pink-100 text-pink-900 p-3 rounded-2xl rounded-tl-none max-w-[85%] font-medium">
+                    Xin chào! Tôi là trợ lý AI chuyên về các giống hoa Iris. Bạn có thắc mắc gì về cách chăm sóc, tưới nước hay ánh sáng không?
+                </div>
+            </div>
+            <div class="p-3 bg-white border-t border-gray-100 flex gap-2">
+                <input type="text" id="chatInput" placeholder="Nhập câu hỏi cho trợ lý AI..." class="flex-grow bg-gray-100 border border-gray-200 rounded-xl px-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-400" onkeypress="if(event.key === 'Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()" class="bg-pink-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-pink-600 transition"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT XỬ LÝ GIAO DIỆN VÀ API -->
+    <script>
+        function toggleDropdown() {
+            const dropdown = document.getElementById('exportDropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        function toggleChatModal() {
+            const modal = document.getElementById('chatModal');
+            modal.classList.toggle('hidden');
+        }
+
+        // Đóng dropdown khi click ra ngoài
+        window.onclick = function(event) {
+            if (!event.target.closest('button')) {
+                const dropdown = document.getElementById('exportDropdown');
+                if (dropdown && !dropdown.classList.contains('hidden')) {
+                    dropdown.classList.add('hidden');
+                }
+            }
+        }
+
+        function loadSample(type) {
+            const samples = {
+                'setosa': [5.1, 3.5, 1.4, 0.2],
+                'versicolor': [6.0, 2.9, 4.5, 1.5],
+                'virginica': [6.5, 3.0, 5.8, 2.2]
+            };
+            const val = samples[type];
+            document.getElementById('sepal_length').value = val[0];
+            document.getElementById('sepal_width').value = val[1];
+            document.getElementById('petal_length').value = val[2];
+            document.getElementById('petal_width').value = val[3];
+        }
+
+        const sampleImages = {
+            'Setosa': 'https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg',
+            'Versicolor': 'https://upload.wikimedia.org/wikipedia/commons/4/41/Iris_versicolor_3.jpg',
+            'Virginica': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
+        };
+
+        // Gửi dự đoán mô hình
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const data = {
+                sepal_length: parseFloat(document.getElementById('sepal_length').value),
+                sepal_width: parseFloat(document.getElementById('sepal_width').value),
+                petal_length: parseFloat(document.getElementById('petal_length').value),
+                petal_width: parseFloat(document.getElementById('petal_width').value)
+            };
+
+            document.getElementById('aiReportContent').innerText = "Đang phân tích thông số và gọi Gemini AI tạo báo cáo...";
+
+            try {
+                let response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                let result = await response.json();
+                
+                document.getElementById('predClass').innerText = result.prediction;
+                document.getElementById('predConf').innerText = (result.confidence * 100).toFixed(1) + '%';
+                
+                if (sampleImages[result.prediction]) {
+                    document.getElementById('resultImage').src = sampleImages[result.prediction];
+                }
+
+                const badge = document.getElementById('anomalyBadge');
+                if (result.is_anomaly) {
+                    badge.className = "inline-block bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-1 rounded-full mb-1";
+                    badge.innerText = "CẢNH BÁO DỊ THƯỜNG";
+                } else {
+                    badge.className = "inline-block bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2.5 py-1 rounded-full mb-1";
+                    badge.innerText = "BÌNH THƯỜNG";
+                }
+
+                if(result.ai_report) {
+                    document.getElementById('aiReportContent').innerText = result.ai_report;
+                }
+            } catch(err) {
+                console.error(err);
+                document.getElementById('aiReportContent').innerText = "Đã xảy ra lỗi khi kết nối đến server.";
+            }
+        });
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const container = document.getElementById('chatMessages');
+            if(!input.value.trim()) return;
+
+            const userText = input.value;
+            container.innerHTML += `<div class="bg-gray-800 text-white p-3 rounded-2xl rounded-tr-none max-w-[85%] ml-auto font-medium">${userText}</div>`;
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                let res = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: userText})
+                });
+                let data = await res.json();
+                container.innerHTML += `<div class="bg-pink-100 text-pink-900 p-3 rounded-2xl rounded-tl-none max-w-[85%] font-medium">${data.response}</div>`;
+                container.scrollTop = container.scrollHeight;
+            } catch(e) {
+                container.innerHTML += `<div class="bg-pink-100 text-pink-900 p-3 rounded-2xl rounded-tl-none max-w-[85%] font-medium">Xin lỗi, trợ lý AI đang bận kết nối.</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
+    """
