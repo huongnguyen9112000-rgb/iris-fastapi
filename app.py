@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.svm import SVC
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="17.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="18.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -46,7 +46,6 @@ AVAILABLE_KERNELS = ['linear', 'rbf', 'poly', 'sigmoid']
 def get_svm_model(kernel_name: str):
     model_file = f"svm_{kernel_name}_model.pkl"
     if not os.path.exists(model_file):
-        # Tự động train bù nếu thiếu file
         iris = load_iris()
         model = SVC(kernel=kernel_name, probability=True, random_state=42)
         model.fit(iris.data, iris.target)
@@ -85,9 +84,9 @@ def predict_iris(data: IrisInput):
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
     species_reports = {
-        'Setosa': f"• Đặc điểm giống Setosa (Model SVM - {kernel.upper()}): Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc: Duy trì độ ẩm bề mặt liên tục, tránh để chậu khô hạn.",
-        'Versicolor': f"• Đặc điểm giống Versicolor (Model SVM - {kernel.upper()}): Phát triển mạnh ở môi trường độ ẩm cao, ven hồ.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ (pH 5.5 - 7.0).\n• Chăm sóc: Tưới đẫm nước thường xuyên, chịu được ngập úng nhẹ.",
-        'Virginica': f"• Đặc điểm giống Virginica (Model SVM - {kernel.upper()}): Thích nghi cực tốt với điều kiện nắng ấm.\n• Đất trồng: Đất phù sa màu mỡ, thoát nước tốt (pH 6.5 - 7.5).\n• Chăm sóc: Ưa nắng toàn phần (6-8 giờ/ngày)."
+        'Setosa': f"• Đặc điểm giống Setosa (SVM - {kernel.upper()}): Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc: Duy trì độ ẩm bề mặt liên tục, tránh để chậu khô hạn.",
+        'Versicolor': f"• Đặc điểm giống Versicolor (SVM - {kernel.upper()}): Phát triển mạnh ở môi trường độ ẩm cao, ven hồ.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ (pH 5.5 - 7.0).\n• Chăm sóc: Tưới đẫm nước thường xuyên, chịu được ngập úng nhẹ.",
+        'Virginica': f"• Đặc điểm giống Virginica (SVM - {kernel.upper()}): Thích nghi cực tốt với điều kiện nắng ấm.\n• Đất trồng: Đất phù sa màu mỡ, thoát nước tốt (pH 6.5 - 7.5).\n• Chăm sóc: Ưa nắng toàn phần (6-8 giờ/ngày)."
     }
     ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung.")
 
@@ -120,7 +119,7 @@ def diagnose_plant(data: DiagnosisInput):
         "vàng": {"name": "Bệnh Vàng lá do úng nước / Thối rễ", "solution": f"Ngừng tưới nước. Kiểm tra thoát nước cho giống {latest_predicted_species}, bổ sung nấm Trichoderma."},
         "đốm": {"name": "Bệnh Đốm lá vi khuẩn / nấm", "solution": "Cắt tỉa lá bệnh, hạn chế tưới phun lên tán lá ban đêm, phun thuốc gốc đồng."},
         "gỉ": {"name": "Bệnh Gỉ sắt", "solution": "Tiêu hủy lá bệnh nặng, phun thuốc chứa Mancozeb."},
-        "thối": {"name": "Bệnh Thối mềm củ rễ", "solution": "Đào củ, cắt phần nhũn, sát trùng bằng vôi bột."},
+        "thối": {"name": "Bệnh Thối mềm củ rễ (Soft Rot)", "solution": "Đào củ, cắt phần nhũn, sát trùng bằng vôi bột."},
         "hoa": {"name": "Hiện tượng không ra hoa", "solution": f"Giống {latest_predicted_species} cần đủ nắng (6-8h/ngày). Tăng cường lân và kali."}
     }
 
@@ -189,7 +188,7 @@ def export_data(format_type: str):
         return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_export.csv"})
     raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB CÓ CHỌN KERNEL MODEL ---
+# --- 4. GIAO DIỆN WEB HOÀN CHỈNH ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -276,7 +275,6 @@ def get_dashboard():
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-sliders text-pink-500"></i> Chọn SVM Kernel & Mẫu hoa</h3>
                 
-                <!-- BỘ CHỌN KERNEL MODEL -->
                 <div class="space-y-1">
                     <label class="block text-[10px] font-extrabold text-slate-500 uppercase">Chọn Kernel Model (SVM):</label>
                     <div class="grid grid-cols-4 gap-1.5">
@@ -315,26 +313,33 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- TRANG 3: CHẨN ĐOÁN BỆNH -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH (ĐẦY ĐỦ CÁC GỢI Ý) -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div class="glass-card p-6 rounded-2xl space-y-4">
+            <div class="glass-card p-6 rounded-2xl space-y-3">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh</h3>
-                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
+                
+                <div class="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 space-y-1.5">
                     <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập gộp triệu chứng:</label>
                     <div class="flex gap-2">
                         <input type="text" id="customSymptomInput" placeholder="Nhập triệu chứng..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
                         <button onclick="submitCustomDiagnosis()" class="bg-pink-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Hỏi</button>
                     </div>
                 </div>
-                <div class="space-y-2 max-h-[220px] overflow-y-auto">
-                    <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🍂 Lá bị úa vàng, thối gốc</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
-                    <button onclick="diagnose('đốm')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🦠 Xuất hiện đốm nâu hoặc đen</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
-                    <button onclick="diagnose('sâu')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 text-xs font-bold flex justify-between"><span>🐛 Có sâu ăn lá hoặc đục thân</span><i class="fa-solid fa-chevron-right text-[10px]"></i></button>
+
+                <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider pt-1">Hoặc chọn nhanh triệu chứng phổ biến:</p>
+                <div class="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                    <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
+                    <button onclick="diagnose('đốm')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🦠 Xuất hiện đốm nâu hoặc đen trên lá</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
+                    <button onclick="diagnose('sâu')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🐛 Có sâu ăn lá hoặc thân bị đục</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
+                    <button onclick="diagnose('gỉ')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🟠 Bệnh gỉ sắt (mụn cam/đỏ trên lá)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
+                    <button onclick="diagnose('thối')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>💧 Bệnh thối mềm củ rễ (Soft Rot)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
+                    <button onclick="diagnose('hoa')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🌸 Cây phát triển tốt nhưng không ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
                 </div>
             </div>
+
             <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                 <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán</h3>
-                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">Chọn hoặc nhập triệu chứng bên trái.</div>
+                <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[280px]">Chọn hoặc nhập triệu chứng bên trái.</div>
             </div>
         </div>
 
