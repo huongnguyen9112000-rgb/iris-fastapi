@@ -3,11 +3,10 @@ import sqlite3
 import csv
 import io
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import joblib
-from fastapi import FastAPI, HTTPException, Response, Request
+from fastapi import FastAPI, HTTPException, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from sklearn.datasets import load_iris
@@ -15,7 +14,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 # Google GenAI SDK (Sử dụng thư viện google-genai mới nhất)
 from google import genai
-from google.genai import types
 
 app = FastAPI(title="Botanical Iris AI Ultra System", version="4.0")
 
@@ -43,7 +41,7 @@ def init_db():
 
 init_db()
 
-# --- 2. MÔ HÌNH MACHINE LEARNING (Tự động train và lưu nếu chưa có) ---
+# --- 2. MÔ HÌNH MACHINE LEARNING ---
 MODEL_FILE = "iris_model.pkl"
 
 def get_or_create_model():
@@ -59,10 +57,9 @@ model = get_or_create_model()
 target_names = ['Setosa', 'Versicolor', 'Virginica']
 
 # --- 3. KHỞI TẠO GOOGLE GEMINI AI ---
-# Đảm bảo bạn đã thiết lập biến môi trường GEMINI_API_KEY trước khi chạy
 try:
     gemini_client = genai.Client()
-except Exception as e:
+except Exception:
     gemini_client = None
 
 # --- PYDANTIC SCHEMAS ---
@@ -81,17 +78,14 @@ class ChatInput(BaseModel):
 def predict_iris(data: IrisInput):
     features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     
-    # Dự đoán mô hình
     probs = model.predict_proba(features)[0]
     pred_idx = np.argmax(probs)
     prediction = target_names[pred_idx]
     confidence = float(probs[pred_idx])
     
-    # Kiểm tra dị thường (Ví dụ: kích thước cánh hoa quá ngắn/dài bất thường)
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    # Gọi Google Gemini AI để tạo báo cáo chăm sóc
-    ai_report = "Hệ thống AI đang offline hoặc chưa cấu hình GEMINI_API_KEY."
+    ai_report = "Hệ thống AI chưa được cấu hình khóa API."
     if gemini_client:
         try:
             prompt = f"Phân tích loài hoa Iris {prediction} với các thông số: Sepal Length={data.sepal_length}, Sepal Width={data.sepal_width}, Petal Length={data.petal_length}, Petal Width={data.petal_width}. Hãy đưa ra tư vấn ngắn gọn về điều kiện sinh trưởng, đất trồng, độ ẩm và cách chăm sóc tối ưu bằng tiếng Việt."
@@ -103,7 +97,6 @@ def predict_iris(data: IrisInput):
         except Exception as e:
             ai_report = f"Lỗi gọi Gemini AI: {str(e)}"
 
-    # Lưu lịch sử vào SQLite
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -128,11 +121,11 @@ def chat_with_assistant(data: ChatInput):
     try:
         response = gemini_client.models.generate_content(
             model='gemini-2.0-flash',
-            contents=f"Bạn là chuyên gia nông học, chuyên gia chăm sóc hoa và thực vật Iris. Hãy trả lời câu hỏi sau của người dùng bằng tiếng Việt một cách chuyên nghiệp, thân thiện: {data.message}"
+            contents=f"Bạn là chuyên gia nông học và thực vật học. Hãy trả lời câu hỏi sau bằng tiếng Việt một cách ngắn gọn, chuyên nghiệp và thân thiện: {data.message}"
         )
         return {"response": response.text}
     except Exception as e:
-        return {"response": f"Đã xảy ra lỗi khi kết nối với Gemini: {str(e)}"}
+        return {"response": f"Lỗi kết nối Gemini: {str(e)}"}
 
 @app.get("/export/{format_type}")
 def export_data(format_type: str):
@@ -165,9 +158,9 @@ def export_data(format_type: str):
         return response
 
     else:
-        raise HTTPException(status_code=400, detail="Định dạng xuất không hỗ trợ (chỉ chấp nhận json hoặc csv).")
+        raise HTTPException(status_code=400, detail="Định dạng xuất không hỗ trợ.")
 
-# --- 5. GIAO DIỆN WEB DASHBOARD (Single Page Application hiện đại) ---
+# --- 5. GIAO DIỆN WEB DASHBOARD HIỆN ĐẠI ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -201,7 +194,7 @@ def get_dashboard():
                 </div>
             </div>
 
-            <!-- Menu Phải & Nút ẩn chức năng (Dropdown) -->
+            <!-- Menu Phải & Nút ẩn chức năng -->
             <div class="flex items-center space-x-3">
                 <!-- Nút Trợ lý AI (Mở Modal) -->
                 <button onclick="toggleChatModal()" class="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2">
@@ -239,7 +232,6 @@ def get_dashboard():
                     </div>
                 </div>
 
-                <!-- Form nhập liệu chính -->
                 <form id="predictionForm" class="space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
@@ -260,12 +252,11 @@ def get_dashboard():
                         </div>
                     </div>
 
-                    <!-- Upload file thu gọn -->
                     <div class="border-2 border-dashed border-pink-200 hover:border-pink-400 rounded-xl p-3 text-center cursor-pointer transition bg-white/40">
                         <input type="file" id="fileUpload" class="hidden">
                         <label for="fileUpload" class="cursor-pointer flex items-center justify-center gap-2">
                             <i class="fa-solid fa-cloud-arrow-up text-pink-400 text-base"></i>
-                            <span class="text-xs font-medium text-gray-600">Tải lên file hoặc hình ảnh hoa</span>
+                            <span class="text-xs font-medium text-gray-600">Tải lên file dữ liệu hoặc ảnh hoa</span>
                         </label>
                     </div>
 
@@ -278,7 +269,6 @@ def get_dashboard():
 
         <!-- CỘT PHẢI: KẾT QUẢ & BÁO CÁO AI -->
         <section class="lg:col-span-7 space-y-6">
-            <!-- Kết quả ML -->
             <div class="glass-panel p-6 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center gap-6">
                 <div class="w-28 h-28 flex-shrink-0 bg-pink-100/50 rounded-2xl flex items-center justify-center overflow-hidden border border-pink-200">
                     <img id="resultImage" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" alt="Iris" class="object-cover w-full h-full">
@@ -291,7 +281,6 @@ def get_dashboard():
                 </div>
             </div>
 
-            <!-- Báo cáo chăm sóc AI -->
             <div class="glass-panel p-6 rounded-2xl shadow-sm">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -300,7 +289,7 @@ def get_dashboard():
                     <span class="text-[11px] text-pink-600 bg-pink-50 px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1"><i class="fa-solid fa-sparkles"></i> Gemini 2.0 Flash</span>
                 </div>
                 <div id="aiReportContent" class="text-xs sm:text-sm text-gray-700 bg-white/60 p-4 rounded-xl border border-pink-100 min-h-[120px] leading-relaxed whitespace-pre-line">
-                    Nhấn "Phân loại & Phân tích AI" để AI tự động xuất báo cáo chi tiết về điều kiện sinh trưởng, đặc điểm hình thái và phương pháp chăm sóc loài hoa này.
+                    Nhấn "Phân loại & Phân tích AI" để hệ thống tự động xuất báo cáo chi tiết về điều kiện sinh trưởng và cách chăm sóc tối ưu.
                 </div>
             </div>
         </section>
@@ -325,7 +314,7 @@ def get_dashboard():
         </div>
     </div>
 
-    <!-- SCRIPT XỬ LÝ GIAO DIỆN VÀ API -->
+    <!-- JAVASCRIPT XỬ LÝ GIAO DIỆN -->
     <script>
         function toggleDropdown() {
             const dropdown = document.getElementById('exportDropdown');
@@ -337,7 +326,6 @@ def get_dashboard():
             modal.classList.toggle('hidden');
         }
 
-        // Đóng dropdown khi click ra ngoài
         window.onclick = function(event) {
             if (!event.target.closest('button')) {
                 const dropdown = document.getElementById('exportDropdown');
@@ -366,7 +354,6 @@ def get_dashboard():
             'Virginica': 'https://upload.wikimedia.org/wikipedia/commons/9/9f/Iris_virginica.jpg'
         };
 
-        // Gửi dự đoán mô hình
         document.getElementById('predictionForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const data = {
