@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="10.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="11.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -72,7 +72,6 @@ def predict_iris(data: IrisInput):
     probabilities = [round(float(p) * 100, 1) for p in probs]
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    # Báo cáo chuyên gia hệ thống tĩnh thay thế cho AI
     reports = {
         'Setosa': "• Đặc điểm sinh trưởng: Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5), giữ ẩm tốt.\n• Ánh sáng & Tưới nước: Ưa nắng bán phần (4-6 giờ/ngày). Tưới 2-3 lần/tuần, giữ đất luôn ẩm nhẹ.",
         'Versicolor': "• Đặc điểm sinh trưởng: Phát triển mạnh ở môi trường đầm lầy, ven hồ, độ ẩm không khí cao.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ, chấp nhận ngập nước nhẹ (pH 5.5 - 7.0).\n• Ánh sáng & Tưới nước: Nắng toàn phần đến bán phần. Cần tưới đẫm nước thường xuyên.",
@@ -134,7 +133,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB ENTERPRISE DASHBOARD ---
+# --- 4. GIAO DIỆN WEB TỐI ƯU (ẨN BỚT CHỨC NĂNG VÀO MENU & MODAL) ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -150,14 +149,14 @@ def get_dashboard():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; min-height: 100vh; }
-        .glass-card { background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+        .glass-card { background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     </style>
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
-    <!-- NAVBAR CHÍNH -->
+    <!-- NAVBAR CHÍNH (GOM TẤT CẢ TÍNH NĂNG VÀO NÚT BẤM) -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3.5 shadow-sm">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-pink-500/20">
                     <i class="fa-solid fa-seedling text-sm"></i>
@@ -170,10 +169,21 @@ def get_dashboard():
                 </div>
             </div>
             
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+                <!-- Nút mở Cấu hình thông số -->
+                <button onclick="toggleInputModal()" class="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold rounded-xl text-xs transition border border-pink-200 flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-sliders"></i> Tùy chỉnh thông số
+                </button>
+
+                <!-- Nút mở Lịch sử Database -->
+                <button onclick="toggleLogsModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition flex items-center gap-2">
+                    <i class="fa-solid fa-database"></i> Lịch sử
+                </button>
+
+                <!-- Menu Xuất dữ liệu -->
                 <div class="relative">
                     <button onclick="toggleDropdown()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-download"></i> Xuất dữ liệu <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                        <i class="fa-solid fa-download"></i> Xuất file <i class="fa-solid fa-chevron-down text-[10px]"></i>
                     </button>
                     <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50">
                         <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50 hover:text-pink-600"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
@@ -184,107 +194,41 @@ def get_dashboard():
         </div>
     </header>
 
-    <!-- NỘI DUNG CHÍNH -->
-    <main class="max-w-7xl mx-auto px-6 py-6 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start">
+    <!-- NỘI DUNG CHÍNH (GỌN GÀNG, TẬP TRUNG) -->
+    <main class="max-w-6xl mx-auto px-6 py-8 flex-grow grid grid-cols-1 md:grid-cols-2 gap-6 w-full items-start">
         
-        <!-- CỘT TRÁI: FORM NHẬP THÔNG SỐ & MẪU (Col-4) -->
-        <section class="lg:col-span-4 space-y-6">
-            <div class="glass-card p-5 rounded-2xl">
-                <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-sliders text-pink-500"></i> Cấu hình thông số & Mẫu
-                </h3>
-                
-                <div class="grid grid-cols-3 gap-1.5 mb-4">
-                    <button type="button" onclick="loadSample('setosa')" class="text-[11px] bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2 rounded-xl transition border border-pink-200">🌸 Setosa</button>
-                    <button type="button" onclick="loadSample('versicolor')" class="text-[11px] bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2 rounded-xl transition border border-purple-200">🌷 Versicolor</button>
-                    <button type="button" onclick="loadSample('virginica')" class="text-[11px] bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2 rounded-xl transition border border-rose-200">🌺 Virginica</button>
-                </div>
-
-                <form id="predictionForm" class="space-y-3">
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Length (cm)</label>
-                        <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Width (cm)</label>
-                        <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Length (cm)</label>
-                        <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Width (cm)</label>
-                        <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500">
-                    </div>
-                    
-                    <button type="submit" class="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-xl text-xs shadow-md shadow-pink-500/20 transition mt-2">
-                        Phân tích Machine Learning
-                    </button>
-                </form>
-            </div>
-        </section>
-
-        <!-- CỘT GIỮA: KẾT QUẢ & BIỂU ĐỒ XÁC SUẤT (Col-4) -->
-        <section class="lg:col-span-4 space-y-6">
-            <div class="glass-panel p-5 rounded-2xl flex flex-col items-center text-center">
+        <!-- CỘT 1: KẾT QUẢ & BIỂU ĐỒ XÁC SUẤT -->
+        <section class="space-y-6">
+            <div class="glass-card p-6 rounded-2xl flex flex-col items-center text-center">
                 <div class="w-24 h-24 rounded-2xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-sm mb-3">
                     <img id="resultImage" src="https://upload.wikimedia.org/wikipedia/commons/5/56/Kosaciec_szczecinkowaty_Iris_setosa.jpg" class="w-full h-full object-cover">
                 </div>
                 <span id="anomalyBadge" class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">Bình thường</span>
                 <h2 id="predClass" class="text-2xl font-black text-slate-900 tracking-tight">Setosa</h2>
-                <p class="text-xs text-slate-500 mt-0.5">Độ tin cậy: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
+                <p class="text-xs text-slate-500 mt-0.5">Độ tin cậy mô hình: <span id="predConf" class="font-extrabold text-pink-600">99.8%</span></p>
             </div>
 
-            <div class="glass-panel p-5 rounded-2xl">
+            <div class="glass-card p-6 rounded-2xl">
                 <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
                     <i class="fa-solid fa-chart-simple text-pink-500"></i> Phân bố xác suất 3 loài
                 </h3>
-                <div class="h-32">
+                <div class="h-36">
                     <canvas id="probChart"></canvas>
                 </div>
             </div>
         </section>
 
-        <!-- CỘT PHẢI: BÁO CÁO CHĂM SÓC (Col-4) -->
-        <section class="lg:col-span-4 space-y-6">
-            <div class="glass-panel p-5 rounded-2xl h-full flex flex-col">
+        <!-- CỘT 2: BÁO CÁO CHĂM SÓC -->
+        <section class="space-y-6">
+            <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                 <div class="flex justify-between items-center mb-3">
                     <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
                         <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Cây
                     </h3>
                     <span class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">Expert System</span>
                 </div>
-                <div id="aiReportContent" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[220px]">
-                    Hệ thống sẵn sàng. Nhấn phân tích để xem thông tin chi tiết và hướng dẫn chăm sóc.
-                </div>
-            </div>
-        </section>
-
-        <!-- BẢNG LỊCH SỬ DỮ LIỆU SQLITE -->
-        <section class="lg:col-span-12">
-            <div class="glass-panel p-5 rounded-2xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-database text-pink-500"></i> Lịch sử dự đoán (SQLite Database)
-                    </h3>
-                    <button onclick="loadLogs()" class="text-xs text-pink-600 font-bold hover:underline"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs">
-                        <thead>
-                            <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase">
-                                <th class="pb-2.5">Thời gian</th>
-                                <th class="pb-2.5">Thông số (SL/SW/PL/PW)</th>
-                                <th class="pb-2.5">Dự đoán</th>
-                                <th class="pb-2.5">Độ tin cậy</th>
-                                <th class="pb-2.5">Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logsTableBody" class="divide-y divide-slate-100 font-semibold text-slate-700">
-                            <tr><td colspan="5" class="py-3 text-center text-slate-400">Đang tải dữ liệu lịch sử...</td></tr>
-                        </tbody>
-                    </table>
+                <div id="aiReportContent" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">
+                    Hệ thống sẵn sàng. Nhấn nút "Tùy chỉnh thông số" ở góc trên để thay đổi dữ liệu hoặc chọn mẫu hoa.
                 </div>
             </div>
         </section>
@@ -295,6 +239,76 @@ def get_dashboard():
     <footer class="text-center py-4 text-xs text-slate-400 font-medium border-t border-slate-200 bg-white">
         Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn
     </footer>
+
+    <!-- ================= MODAL 1: CẤU HÌNH THÔNG SỐ ================= -->
+    <div id="inputModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-md space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-extrabold text-sm text-slate-900">Cấu hình thông số & Mẫu hoa</h3>
+                <button onclick="toggleInputModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center font-bold">&times;</button>
+            </div>
+            
+            <div class="grid grid-cols-3 gap-2">
+                <button type="button" onclick="loadSample('setosa'); toggleInputModal();" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2.5 rounded-xl transition border border-pink-200">🌸 Setosa</button>
+                <button type="button" onclick="loadSample('versicolor'); toggleInputModal();" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2.5 rounded-xl transition border border-purple-200">🌷 Versicolor</button>
+                <button type="button" onclick="loadSample('virginica'); toggleInputModal();" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2.5 rounded-xl transition border border-rose-200">🌺 Virginica</button>
+            </div>
+
+            <form id="predictionForm" class="space-y-3 pt-1">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Length (cm)</label>
+                        <input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Width (cm)</label>
+                        <input type="number" step="0.1" id="sepal_width" value="3.5" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Length (cm)</label>
+                        <input type="number" step="0.1" id="petal_length" value="1.4" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Petal Width (cm)</label>
+                        <input type="number" step="0.1" id="petal_width" value="0.2" class="w-full bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none">
+                    </div>
+                </div>
+                
+                <button type="submit" onclick="toggleInputModal()" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition mt-2">
+                    Xác nhận & Phân tích
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 2: LỊCH SỬ DATABASE ================= -->
+    <div id="logsModal" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-2xl space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-database text-pink-500"></i> Lịch sử dự đoán (SQLite Database)
+                </h3>
+                <button onclick="toggleLogsModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center font-bold">&times;</button>
+            </div>
+            
+            <div class="overflow-y-auto flex-grow">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase sticky top-0 bg-white">
+                            <th class="pb-2.5">Thời gian</th>
+                            <th class="pb-2.5">Thông số (SL/SW/PL/PW)</th>
+                            <th class="pb-2.5">Dự đoán</th>
+                            <th class="pb-2.5">Độ tin cậy</th>
+                            <th class="pb-2.5">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody" class="divide-y divide-slate-100 font-semibold text-slate-700">
+                        <tr><td colspan="5" class="py-4 text-center text-slate-400">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
     <!-- JAVASCRIPT -->
     <script>
@@ -314,9 +328,14 @@ def get_dashboard():
             }
         });
 
-        function toggleDropdown() {
-            document.getElementById('exportDropdown').classList.toggle('hidden');
+        function toggleInputModal() { document.getElementById('inputModal').classList.toggle('hidden'); }
+        function toggleLogsModal() { 
+            document.getElementById('logsModal').classList.toggle('hidden');
+            if(!document.getElementById('logsModal').classList.contains('hidden')) {
+                loadLogs();
+            }
         }
+        function toggleDropdown() { document.getElementById('exportDropdown').classList.toggle('hidden'); }
 
         window.onclick = function(event) {
             if (!event.target.closest('button')) {
@@ -353,7 +372,7 @@ def get_dashboard():
                 let logs = await res.json();
                 let tbody = document.getElementById('logsTableBody');
                 if(logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">Chưa có bản ghi nào.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi nào.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = logs.map(item => `
@@ -383,7 +402,7 @@ def get_dashboard():
                 petal_width: parseFloat(document.getElementById('petal_width').value)
             };
 
-            document.getElementById('aiReportContent').innerText = "⏳ Đang chạy phân tích Machine Learning...";
+            document.getElementById('aiReportContent').innerText = "⏳ Đang phân tích Machine Learning...";
 
             try {
                 let res = await fetch('/predict', {
@@ -417,16 +436,10 @@ def get_dashboard():
                 if(result.ai_report) {
                     document.getElementById('aiReportContent').innerText = result.ai_report;
                 }
-
-                loadLogs();
             } catch(err) {
                 document.getElementById('aiReportContent').innerText = "❌ Lỗi kết nối đến máy chủ.";
             }
         });
-
-        window.onload = function() {
-            loadLogs();
-        };
     </script>
 </body>
 </html>
