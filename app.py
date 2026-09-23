@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="14.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="15.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -103,61 +103,43 @@ def predict_iris(data: IrisInput):
 
 @app.post("/diagnose")
 def diagnose_plant(data: DiagnosisInput):
-    query = data.symptom.lower()
+    query = data.symptom.lower().strip()
     
-    knowledge_base = {
-        "yellow_leaves": {
-            "disease": "Bệnh Vàng lá do thừa nước hoặc úng rễ (Root Rot)",
-            "solution": "Ngừng tưới nước ngay lập tức. Kiểm tra độ thoát nước của đất, cắt bỏ các rễ đã bị mục đen và bổ sung hoạt chất diệt nấm sinh học."
-        },
-        "spots": {
-            "disease": "Bệnh Đốm lá vi khuẩn / nấm (Leaf Spot)",
-            "solution": "Cắt tỉa các lá bị đốm nặng để tránh lây lan. Tránh tưới nước lên bề mặt lá vào chiều tối. Sử dụng thuốc gốc đồng phun định kỳ."
-        },
-        "wilting": {
-            "disease": "Sâu đục thân cây hoa Iris (Iris Borer)",
-            "solution": "Kiểm tra phần gốc và thân xem có lỗ đục hoặc ấu trùng sâu non không. Vệ sinh sạch sẽ lá khô quanh gốc vào cuối mùa thu."
-        },
-        "no_flowers": {
-            "disease": "Hiện tượng không ra hoa do thiếu ánh sáng hoặc dư phân đạm",
-            "solution": "Đảm bảo cây nhận đủ từ 6 tiếng nắng trực tiếp mỗi ngày. Giảm lượng phân bón có hàm lượng Đạm (N) cao, tăng cường Lân và Kali."
-        },
-        "rust": {
-            "disease": "Bệnh Gỉ sắt (Iris Rust)",
-            "solution": "Xuất hiện các mụn màu cam hoặc nâu đỏ trên lá. Cần cắt bỏ phần lá bệnh, phun thuốc trừ nấm chứa Mancozeb hoặc Hexaconazole."
-        },
-        "soft_rot": {
-            "disease": "Bệnh Thối mềm củ rễ (Bacterial Soft Rot)",
-            "solution": "Thường do vi khuẩn tấn công vết thương trên củ. Cắt bỏ phần củ bị nhũn, chấm vôi bột hoặc thuốc kháng sinh nông nghiệp vào vết cắt, phơi nắng nhẹ."
-        },
-        "white_bugs": {
-            "disease": "Rệp sáp hoặc bọ phấn trắng hại cây",
-            "solution": "Dùng vòi nước áp lực rửa trôi bớt rệp, sau đó phun dung dịch dầu khoáng kết hợp xà phòng sinh học hoặc thuốc trừ sâu lưu dẫn."
+    # Logic kiểm tra từ khóa chính xác để tránh trả lời trớt quớt
+    if any(k in query for k in ["sâu", "ăn lá", "cắn", "sâu non", "bọ"]):
+        return {
+            "disease": "Sâu hại ăn lá & Sâu đục thân cây hoa Iris",
+            "solution": "• Biểu hiện: Lá bị khuyết thủng, mép lá nham nhở hoặc có vết đục.\n• Phác đồ điều trị: Bắt sâu thủ công vào sáng sớm hoặc chiều mát. Phun thuốc trừ sâu sinh học (Bt - Bacillus thuringiensis) hoặc thuốc lưu dẫn an toàn cho cây cảnh."
         }
-    }
-
-    # Tìm kiếm thông minh nếu người dùng gõ từ khóa tự do
-    for key, val in knowledge_base.items():
-        if key in query or any(word in query for word in val["disease"].lower().split()):
-            return val
-
-    # Nếu gõ câu hỏi tự do mà không khớp key cứng, trả về phân tích thông minh dựa trên từ khóa tiếng Việt
-    if "vàng" in query or "úng" in query or "nước" in query:
-        return knowledge_base["yellow_leaves"]
-    elif "đốm" in query or "lá" in query or "đen" in query:
-        return knowledge_base["spots"]
-    elif "sâu" in query or "đục" in query or "thân" in query:
-        return knowledge_base["wilting"]
-    elif "hoa" in query or "nụ" in query:
-        return knowledge_base["no_flowers"]
-    elif "gỉ" in query or "cam" in query or "đỏ" in query:
-        return knowledge_base["rust"]
-    elif "mềm" in query or "nhũn" in query or "thối" in query:
-        return knowledge_base["soft_rot"]
+    elif any(k in query for k in ["vàng", "úng", "ngập", "thừa nước", "mềm nhũn"]):
+        return {
+            "disease": "Bệnh Vàng lá do thừa nước hoặc úng rễ (Root Rot)",
+            "solution": "• Biểu hiện: Lá chuyển vàng từ gốc lên, rễ bị thối đen.\n• Phác đồ điều trị: Ngừng tưới nước ngay lập tức. Cải tạo độ thoát nước của đất, cắt bỏ phần rễ mục và tưới dung dịch nấm đối kháng Trichoderma."
+        }
+    elif any(k in query for k in ["đốm", "nâu", "đen", "vết"]):
+        return {
+            "disease": "Bệnh Đốm lá vi khuẩn / nấm (Leaf Spot)",
+            "solution": "• Biểu hiện: Xuất hiện các đốm tròn màu nâu hoặc viền đen trên phiến lá.\n• Phác đồ điều trị: Cắt tỉa ngay các lá bị bệnh nặng để tránh lây lan. Hạn chế tưới phun lên lá vào ban đêm. Phun thuốc trừ nấm gốc đồng định kỳ."
+        }
+    elif any(k in query for k in ["gỉ", "cam", "đỏ", "mụn"]):
+        return {
+            "disease": "Bệnh Gỉ sắt (Iris Rust)",
+            "solution": "• Biểu hiện: Lá xuất hiện các mụn u nổi cộm chứa bột màu cam hoặc nâu đỏ.\n• Phác đồ điều trị: Thu gom và tiêu hủy lá bệnh. Phun thuốc trừ nấm chuyên dụng chứa Mancozeb hoặc Hexaconazole."
+        }
+    elif any(k in query for k in ["thối", "củ", "nhũn"]):
+        return {
+            "disease": "Bệnh Thối mềm củ (Bacterial Soft Rot)",
+            "solution": "• Biểu hiện: Phần củ rễ bị nhũn nước, có mùi hôi.\n• Phác đồ điều trị: Đào củ lên, cắt bỏ phần thịt củ bị thối, rắc vôi bột hoặc thuốc kháng sinh nông nghiệp, để khô vết cắt trước khi trồng lại vào đất mới sạch."
+        }
+    elif any(k in query for k in ["hoa", "nụ", "không ra"]):
+        return {
+            "disease": "Hiện tượng cây không chịu ra hoa",
+            "solution": "• Nguyên nhân: Thiếu ánh sáng mặt trời hoặc dư thừa phân Đạm (N).\n• Phác đồ điều trị: Đặt chậu cây ở nơi có ít nhất 6-8 tiếng nắng trực tiếp mỗi ngày. Ngừng bón đạm, thay vào đó bổ sung phân Lân (P) và Kali (K) kích thích ra hoa."
+        }
 
     return {
         "disease": f"Phân tích chuyên gia cho yêu cầu: '{data.symptom}'",
-        "solution": "Triệu chứng bạn mô tả cần được theo dõi thêm độ ẩm đất và ánh sáng. Khuyên bạn nên vệ sinh gốc cây, cắt tỉa phần lá già héo úa và duy trì thông thoáng."
+        "solution": "• Đánh giá chung: Triệu chứng bạn cung cấp chưa đủ rõ ràng để kết luận bệnh đặc hiệu.\n• Lời khuyên: Hãy đảm bảo cây trồng nhận đủ ánh sáng, độ ẩm đất vừa phải (không quá khô cũng không úng nước), và thường xuyên kiểm tra mặt dưới lá để phát hiện sớm sâu bệnh."
     }
 
 @app.post("/analyze-file")
@@ -250,7 +232,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB NÂNG CẤP VỚI Ô HỎI BỆNH TỰ DO ---
+# --- 4. GIAO DIỆN WEB HOÀN CHỈNH ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -408,18 +390,17 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & KHUNG ĐẶT CÂU HỎI TỰ DO -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & KHUNG ĐẶT CÂU HỎI -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                     <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh cây hoa Iris
                 </h3>
                 
-                <!-- Ô HỎI BỆNH TỰ DO -->
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
                     <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập triệu chứng hoặc câu hỏi của bạn:</label>
                     <div class="flex gap-2">
-                        <input type="text" id="customSymptomInput" placeholder="Ví dụ: lá cây bị đốm vàng, sâu đục thân..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
+                        <input type="text" id="customSymptomInput" placeholder="Ví dụ: có sâu ăn lá, lá bị vàng..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
                         <button onclick="submitCustomDiagnosis()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Hỏi AI</button>
                     </div>
                 </div>
