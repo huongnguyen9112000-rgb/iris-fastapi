@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="15.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="16.0")
 
 # --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
 DB_FILE = "iris_system.db"
@@ -54,6 +54,9 @@ def get_or_create_model():
 model = get_or_create_model()
 target_names = ['Setosa', 'Versicolor', 'Virginica']
 
+# Biến toàn cục lưu trạng thái loài hoa gần nhất để phục vụ chẩn đoán bệnh theo loài
+latest_predicted_species = "Setosa"
+
 class IrisInput(BaseModel):
     sepal_length: float
     sepal_width: float
@@ -66,6 +69,7 @@ class DiagnosisInput(BaseModel):
 # --- 3. API ENDPOINTS ---
 @app.post("/predict")
 def predict_iris(data: IrisInput):
+    global latest_predicted_species
     features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
     
     probs = model.predict_proba(features)[0]
@@ -73,15 +77,18 @@ def predict_iris(data: IrisInput):
     prediction = target_names[pred_idx]
     confidence = float(probs[pred_idx])
     
+    latest_predicted_species = prediction  # Cập nhật loài hoa hiện tại
+    
     probabilities = [round(float(p) * 100, 1) for p in probs]
     is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
 
-    reports = {
-        'Setosa': "• Đặc điểm sinh trưởng: Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5), giữ ẩm tốt.\n• Ánh sáng & Tưới nước: Ưa nắng bán phần (4-6 giờ/ngày). Tưới 2-3 lần/tuần, giữ đất luôn ẩm nhẹ.",
-        'Versicolor': "• Đặc điểm sinh trưởng: Phát triển mạnh ở môi trường đầm lầy, ven hồ, độ ẩm không khí cao.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ, chấp nhận ngập nước nhẹ (pH 5.5 - 7.0).\n• Ánh sáng & Tưới nước: Nắng toàn phần đến bán phần. Cần tưới đẫm nước thường xuyên.",
-        'Virginica': "• Đặc điểm sinh trưởng: Khả năng thích nghi tốt với thời tiết ấm áp, chịu nắng tốt.\n• Đất trồng: Đất phù sa, đất mùn ẩm dày, pH trung tính đến hơi kiềm (6.5 - 7.5).\n• Ánh sáng & Tưới nước: Yêu cầu nắng toàn phần (6-8 giờ/ngày) để củ phát triển khỏe mạnh."
+    # Báo cáo chuyên sâu cá nhân hóa theo từng loài hoa
+    species_reports = {
+        'Setosa': f"• Đặc điểm giống Setosa: Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt nhưng rất nhạy cảm nếu đất quá khô hạn.\n• Đất trồng tối ưu: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc riêng: Loài này có bộ rễ nông, cần duy trì độ ẩm bề mặt liên tục, tránh để chậu bị khô đất hoàn toàn.",
+        'Versicolor': f"• Đặc điểm giống Versicolor: Phát triển mạnh ở môi trường độ ẩm cao, ven hồ hoặc đầm lầy nhẹ.\n• Đất trồng tối ưu: Đất sét bùn, nhiều hữu cơ, giữ nước tốt (pH 5.5 - 7.0).\n• Chăm sóc riêng: Cần tưới đẫm nước thường xuyên hơn các loài khác, có thể chịu được ngập úng nhẹ trong thời gian ngắn.",
+        'Virginica': f"• Đặc điểm giống Virginica: Thích nghi cực tốt với điều kiện nắng ấm và cường độ ánh sáng cao.\n• Đất trồng tối ưu: Đất phù sa màu mỡ, thoát nước tốt, pH trung tính đến hơi kiềm (6.5 - 7.5).\n• Chăm sóc riêng: Ưa nắng toàn phần (6-8 giờ/ngày), cần không gian thông thoáng để tránh nấm bệnh phát triển do rậm rạp."
     }
-    ai_report = reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung của loài hoa Iris.")
+    ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung của loài hoa Iris.")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect(DB_FILE)
@@ -103,43 +110,61 @@ def predict_iris(data: IrisInput):
 
 @app.post("/diagnose")
 def diagnose_plant(data: DiagnosisInput):
+    global latest_predicted_species
     query = data.symptom.lower().strip()
     
-    # Logic kiểm tra từ khóa chính xác để tránh trả lời trớt quớt
-    if any(k in query for k in ["sâu", "ăn lá", "cắn", "sâu non", "bọ"]):
-        return {
-            "disease": "Sâu hại ăn lá & Sâu đục thân cây hoa Iris",
-            "solution": "• Biểu hiện: Lá bị khuyết thủng, mép lá nham nhở hoặc có vết đục.\n• Phác đồ điều trị: Bắt sâu thủ công vào sáng sớm hoặc chiều mát. Phun thuốc trừ sâu sinh học (Bt - Bacillus thuringiensis) hoặc thuốc lưu dẫn an toàn cho cây cảnh."
+    # Cơ sở tri thức các bệnh
+    knowledge_base = {
+        "sâu": {
+            "name": "Sâu hại ăn lá & Sâu đục thân",
+            "solution": "Bắt sâu thủ công vào sáng sớm. Phun thuốc trừ sâu sinh học (Bt) hoặc dung dịch tỏi ớt."
+        },
+        "vàng": {
+            "name": "Bệnh Vàng lá do úng nước / Thối rễ",
+            "solution": f"Ngừng tưới nước ngay. Đối với giống {latest_predicted_species}, cần kiểm tra hệ thống thoát nước của chậu và bổ sung nấm đối kháng Trichoderma."
+        },
+        "đốm": {
+            "name": "Bệnh Đốm lá vi khuẩn / nấm",
+            "solution": "Cắt tỉa lá bệnh, tránh tưới nước lên tán lá vào ban đêm, phun thuốc trừ nấm gốc đồng định kỳ."
+        },
+        "gỉ": {
+            "name": "Bệnh Gỉ sắt (mụn cam/đỏ trên lá)",
+            "solution": "Tiêu hủy lá bị nặng, phun thuốc trừ nấm chuyên dụng chứa Mancozeb."
+        },
+        "thối": {
+            "name": "Bệnh Thối mềm củ rễ (Soft Rot)",
+            "solution": "Đào củ lên, cắt bỏ phần nhũn, sát trùng bằng vôi bột hoặc thuốc kháng sinh nông nghiệp."
+        },
+        "hoa": {
+            "name": "Hiện tượng không ra hoa",
+            "solution": f"Giống {latest_predicted_species} cần đủ nắng trực tiếp (6-8 tiếng/ngày). Giảm phân đạm, tăng cường lân và kali."
+        },
+        "khô": {
+            "name": "Hiện tượng khô héo / thiếu dinh dưỡng",
+            "solution": "Cung cấp đủ nước, bổ sung phân hữu cơ hoai mục và kiểm tra độ pH của đất."
         }
-    elif any(k in query for k in ["vàng", "úng", "ngập", "thừa nước", "mềm nhũn"]):
+    }
+
+    # Quét tất cả các từ khóa xuất hiện trong câu hỏi để trả về gộp nhiều bệnh nếu người dùng hỏi nhiều ý
+    matched_diseases = []
+    for keyword, info in knowledge_base.items():
+        if keyword in query:
+            matched_diseases.append(info)
+
+    # Nếu không khớp từ khóa cụ thể nào, phân tích chung
+    if not matched_diseases:
         return {
-            "disease": "Bệnh Vàng lá do thừa nước hoặc úng rễ (Root Rot)",
-            "solution": "• Biểu hiện: Lá chuyển vàng từ gốc lên, rễ bị thối đen.\n• Phác đồ điều trị: Ngừng tưới nước ngay lập tức. Cải tạo độ thoát nước của đất, cắt bỏ phần rễ mục và tưới dung dịch nấm đối kháng Trichoderma."
-        }
-    elif any(k in query for k in ["đốm", "nâu", "đen", "vết"]):
-        return {
-            "disease": "Bệnh Đốm lá vi khuẩn / nấm (Leaf Spot)",
-            "solution": "• Biểu hiện: Xuất hiện các đốm tròn màu nâu hoặc viền đen trên phiến lá.\n• Phác đồ điều trị: Cắt tỉa ngay các lá bị bệnh nặng để tránh lây lan. Hạn chế tưới phun lên lá vào ban đêm. Phun thuốc trừ nấm gốc đồng định kỳ."
-        }
-    elif any(k in query for k in ["gỉ", "cam", "đỏ", "mụn"]):
-        return {
-            "disease": "Bệnh Gỉ sắt (Iris Rust)",
-            "solution": "• Biểu hiện: Lá xuất hiện các mụn u nổi cộm chứa bột màu cam hoặc nâu đỏ.\n• Phác đồ điều trị: Thu gom và tiêu hủy lá bệnh. Phun thuốc trừ nấm chuyên dụng chứa Mancozeb hoặc Hexaconazole."
-        }
-    elif any(k in query for k in ["thối", "củ", "nhũn"]):
-        return {
-            "disease": "Bệnh Thối mềm củ (Bacterial Soft Rot)",
-            "solution": "• Biểu hiện: Phần củ rễ bị nhũn nước, có mùi hôi.\n• Phác đồ điều trị: Đào củ lên, cắt bỏ phần thịt củ bị thối, rắc vôi bột hoặc thuốc kháng sinh nông nghiệp, để khô vết cắt trước khi trồng lại vào đất mới sạch."
-        }
-    elif any(k in query for k in ["hoa", "nụ", "không ra"]):
-        return {
-            "disease": "Hiện tượng cây không chịu ra hoa",
-            "solution": "• Nguyên nhân: Thiếu ánh sáng mặt trời hoặc dư thừa phân Đạm (N).\n• Phác đồ điều trị: Đặt chậu cây ở nơi có ít nhất 6-8 tiếng nắng trực tiếp mỗi ngày. Ngừng bón đạm, thay vào đó bổ sung phân Lân (P) và Kali (K) kích thích ra hoa."
+            "disease": f"Phân tích chuyên gia cho giống {latest_predicted_species}",
+            "solution": f"Dựa trên câu hỏi '{data.symptom}': Cần kiểm tra độ ẩm đất, đảm bảo thông thoáng và ánh sáng tự nhiên phù hợp đặc tính sinh trưởng của giống hoa Iris {latest_predicted_species}."
         }
 
+    # Tổng hợp kết quả trả về nhiều bệnh nếu phát hiện nhiều từ khóa
+    combined_name = " + ".join([d["name"] for d in matched_diseases])
+    combined_solution = "\n\n".join([f"🔹 **{d['name']}**:\n{d['solution']}" for d in matched_diseases])
+
     return {
-        "disease": f"Phân tích chuyên gia cho yêu cầu: '{data.symptom}'",
-        "solution": "• Đánh giá chung: Triệu chứng bạn cung cấp chưa đủ rõ ràng để kết luận bệnh đặc hiệu.\n• Lời khuyên: Hãy đảm bảo cây trồng nhận đủ ánh sáng, độ ẩm đất vừa phải (không quá khô cũng không úng nước), và thường xuyên kiểm tra mặt dưới lá để phát hiện sớm sâu bệnh."
+        "disease": f"Phát hiện {len(matched_diseases)} vấn đề cho giống hoa {latest_predicted_species}: {combined_name}",
+        "solution": combined_solution
     }
 
 @app.post("/analyze-file")
@@ -232,7 +257,7 @@ def export_data(format_type: str):
     else:
         raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB HOÀN CHỈNH ---
+# --- 4. GIAO DIỆN WEB ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -326,7 +351,7 @@ def get_dashboard():
                 <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                     <div class="flex justify-between items-center mb-3">
                         <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                            <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Cây
+                            <i class="fa-solid fa-file-lines text-pink-500"></i> Báo cáo Chăm sóc Cây (Chuyên biệt theo loài)
                         </h3>
                         <span class="text-[10px] text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-bold">Expert System</span>
                     </div>
@@ -390,39 +415,39 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & KHUNG ĐẶT CÂU HỎI -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH & TÌM KIẾM ĐA TRIỆU CHỨNG -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh cây hoa Iris
+                    <i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh (Hỗ trợ đa triệu chứng)
                 </h3>
                 
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
-                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập triệu chứng hoặc câu hỏi của bạn:</label>
+                    <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập gộp các triệu chứng của bạn (ví dụ: có sâu, lá bị vàng...):</label>
                     <div class="flex gap-2">
-                        <input type="text" id="customSymptomInput" placeholder="Ví dụ: có sâu ăn lá, lá bị vàng..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
-                        <button onclick="submitCustomDiagnosis()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Hỏi AI</button>
+                        <input type="text" id="customSymptomInput" placeholder="Nhập triệu chứng..." class="flex-grow bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500" onkeypress="if(event.key==='Enter') submitCustomDiagnosis()">
+                        <button onclick="submitCustomDiagnosis()" class="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition">Chẩn đoán</button>
                     </div>
                 </div>
 
                 <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-2">Hoặc chọn nhanh triệu chứng phổ biến:</p>
                 <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                    <button onclick="diagnose('yellow_leaves')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('spots')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('đốm')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🦠 Xuất hiện đốm nâu hoặc đen trên bề mặt lá</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('wilting')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
-                        <span>🐛 Cây héo rũ, thân có dấu hiệu bị đục lỗ</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
+                    <button onclick="diagnose('sâu')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                        <span>🐛 Có sâu ăn lá hoặc thân bị đục</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('rust')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('gỉ')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🟠 Bệnh gỉ sắt (mụn cam/đỏ nổi trên lá)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('soft_rot')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('thối')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>💧 Bệnh thối mềm củ rễ (Soft Rot)</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
-                    <button onclick="diagnose('no_flowers')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
+                    <button onclick="diagnose('hoa')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between">
                         <span>🌸 Cây phát triển tốt nhưng không chịu ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i>
                     </button>
                 </div>
@@ -430,10 +455,10 @@ def get_dashboard():
 
             <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                 <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán & Phác đồ
+                    <i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán Chuyên gia
                 </h3>
                 <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[250px]">
-                    Vui lòng chọn triệu chứng hoặc nhập câu hỏi ở bảng bên trái để nhận phác đồ điều trị từ chuyên gia.
+                    Vui lòng chọn hoặc nhập triệu chứng bất thường ở bảng bên trái để nhận phác đồ điều trị chuyên biệt theo loài.
                 </div>
             </div>
         </div>
@@ -476,7 +501,7 @@ def get_dashboard():
         Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn
     </footer>
 
-    <!-- JAVASCRIPT XỬ LÝ -->
+    <!-- JAVASCRIPT -->
     <script>
         let allLogs = [];
         const ctxProb = document.getElementById('probChart').getContext('2d');
@@ -582,7 +607,7 @@ def get_dashboard():
         }
 
         async function diagnose(symptom) {
-            document.getElementById('diagnosisResult').innerText = "⏳ Đang phân tích triệu chứng chuyên gia...";
+            document.getElementById('diagnosisResult').innerText = "⏳ Đang tổng hợp phác đồ chuyên gia theo loài hoa...";
             try {
                 let res = await fetch('/diagnose', {
                     method: 'POST',
@@ -592,7 +617,7 @@ def get_dashboard():
                 let data = await res.json();
                 document.getElementById('diagnosisResult').innerHTML = `
                     <strong class="text-pink-600 text-sm block mb-2">🔍 Chẩn đoán: ${data.disease}</strong>
-                    <p class="text-slate-700 leading-relaxed font-semibold">💊 Phác đồ điều trị:<br>${data.solution}</p>
+                    <p class="text-slate-700 leading-relaxed font-semibold">💊 Phác đồ điều trị chuyên biệt:<br>${data.solution}</p>
                 `;
             } catch(e) {
                 document.getElementById('diagnosisResult').innerText = "❌ Lỗi hệ thống chẩn đoán.";
