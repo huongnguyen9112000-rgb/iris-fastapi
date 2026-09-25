@@ -1,17 +1,98 @@
-from fastapi import FastAPI
+import sqlite3
+import csv
+import json
+import os
+import io
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from database import init_db
-from routers import predict_router, diagnose_router, logs_router
+from routers import predict_router
 
 app = FastAPI(title="Iris Botanical Enterprise Suite", version="18.0")
 
 # Khởi tạo cơ sở dữ liệu khi khởi động
 init_db()
 
-# Gắn các router chức năng
+# Gắn router dự đoán chính
 app.include_router(predict_router.router)
-app.include_router(diagnose_router.router)
-app.include_router(logs_router.router)
+
+# Model Pydantic cho phần chẩn đoán
+class DiagnosisInput(BaseModel):
+    symptom: str
+
+# API Chẩn đoán bệnh
+@app.post("/diagnose")
+def diagnose_plant(data: DiagnosisInput):
+    symptom = data.symptom.lower()
+    if "vàng" in symptom:
+        return {"disease": "Bệnh vàng lá, thối rễ do úng nước", "solution": "Giảm lượng nước tưới, bổ sung vi sinh Trichoderma và cắt tỉa lá hỏng."}
+    elif "đốm" in symptom:
+        return {"disease": "Bệnh đốm lá do nấm Cercospora", "solution": "Sử dụng thuốc trừ nấm gốc đồng, thu gom và tiêu hủy lá bị bệnh nặng."}
+    elif "sâu" in symptom:
+        return {"disease": "Sâu ăn lá / Sâu đục thân", "solution": "Dùng chế phẩm sinh học Bt hoặc bắt sâu thủ công vào lúc sáng sớm."}
+    elif "gỉ" in symptom:
+        return {"disease": "Bệnh gỉ sắt (Rust)", "solution": "Phun thuốc đặc trị nấm gỉ sắt, giữ thông thoáng cho vườn hoa."}
+    elif "thối" in symptom:
+        return {"disease": "Bệnh thối mềm vi khuẩn (Soft Rot)", "solution": "Ngừng tưới nước ngay lập tức, cách ly cây bệnh và xử lý đất bằng vôi bột."}
+    else:
+        return {"disease": "Thiếu hụt dinh dưỡng hoặc quang hợp kém", "solution": "Bón phân NPK cân đối, đảm bảo cây nhận đủ ánh sáng mặt trời tự nhiên."}
+
+# API Lịch sử dự đoán
+@app.get("/logs")
+def get_logs():
+    db_path = "iris_database.db" # Hoặc đường dẫn file db của bạn
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 50")
+        rows = cursor.fetchall()
+        result = [dict(row) for row in rows]
+    except Exception:
+        result = []
+    conn.close()
+    return result
+
+# API Xuất file JSON
+@app.get("/export/json")
+def export_json():
+    db_path = "iris_database.db"
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM predictions")
+        rows = [dict(row) for row in cursor.fetchall()]
+    except Exception:
+        rows = []
+    conn.close()
+    return Response(content=json.dumps(rows, ensure_ascii=False, indent=4), media_type="application/json", headers={"Content-Disposition": "attachment; filename=iris_logs.json"})
+
+# API Xuất file CSV
+@app.get("/export/csv")
+def export_csv():
+    db_path = "iris_database.db"
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT * FROM predictions")
+        rows = cursor.fetchall()
+        column_names = [description[0] for description in cursor.description]
+    except Exception:
+        rows = []
+        column_names = []
+    conn.close()
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    if column_names:
+        writer.writerow(column_names)
+    writer.writerows(rows)
+    
+    return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_logs.csv"})
 
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
@@ -227,7 +308,7 @@ def get_dashboard():
                 let res = await fetch('/logs');
                 allLogs = await res.json();
                 let tbody = document.getElementById('logsTableBody');
-                if(allLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi.</td></tr>'; return; }
+                if(!Array.isArray(allLogs) || allLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi.</td></tr>'; return; }
                 tbody.innerHTML = allLogs.map(item => `
                     <tr class="hover:bg-slate-50 transition">
                         <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
