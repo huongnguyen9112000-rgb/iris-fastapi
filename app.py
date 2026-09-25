@@ -13,5 +13,4 @@ app.include_router(predict_router.router)
 
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
-    # Đặt mã giao diện HTML của bạn vào đây (hoặc giữ lại đoạn return giao diện cũ của bạn)
     return "<h1>Iris Botanical Enterprise Suite is Running!</h1>"
