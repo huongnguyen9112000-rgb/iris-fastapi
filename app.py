@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import csv
 import io
 import json
@@ -13,43 +12,15 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.svm import SVC
 
+# Nhập các hàm xử lý SQLite từ file database.py đã tách riêng
+from database import init_db, insert_prediction, get_all_predictions, register_db_user, check_db_user
+
 app = FastAPI(title="Iris Botanical Enterprise Suite", version="19.0")
 
-# --- 1. CƠ SỞ DỮ LIỆU SQLITE (Thêm bảng users cho Đăng ký/Đăng nhập) ---
-DB_FILE = "iris_system.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    # Bảng lưu lịch sử dự đoán
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            model_used TEXT,
-            sepal_length REAL,
-            sepal_width REAL,
-            petal_length REAL,
-            petal_width REAL,
-            prediction TEXT,
-            confidence REAL,
-            is_anomaly INTEGER
-        )
-    ''')
-    # Bảng lưu tài khoản người dùng
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
+# Khởi tạo cơ sở dữ liệu
 init_db()
 
-# --- 2. QUẢN LÝ CÁC MÔ HÌNH SVM THEO KERNEL ---
+# --- QUẢN LÝ CÁC MÔ HÌNH SVM THEO KERNEL ---
 AVAILABLE_KERNELS = ['linear', 'rbf', 'poly', 'sigmoid']
 
 def get_svm_model(kernel_name: str):
@@ -78,32 +49,22 @@ class UserAuthInput(BaseModel):
     username: str
     password: str
 
-# --- 3. API AUTHENTICATION (Đăng ký & Đăng nhập) ---
+# --- API AUTHENTICATION ---
 @app.post("/api/register")
 def register_user(data: UserAuthInput):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (data.username.strip(), data.password))
-        conn.commit()
-        conn.close()
+    success = register_db_user(data.username.strip(), data.password)
+    if success:
         return {"status": "SUCCESS", "message": "Đăng ký thành công!"}
-    except sqlite3.IntegrityError:
-        conn.close()
-        raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại!")
+    raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại!")
 
 @app.post("/api/login")
 def login_user(data: UserAuthInput):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (data.username.strip(), data.password))
-    user = cursor.fetchone()
-    conn.close()
+    user = check_db_user(data.username.strip(), data.password)
     if user:
         return {"status": "SUCCESS", "message": "Đăng nhập thành công!", "username": user[1]}
     raise HTTPException(status_code=400, detail="Sai tên đăng nhập hoặc mật khẩu!")
 
-# --- 4. API ENDPOINTS CHÍNH ---
+# --- API ENDPOINTS CHÍNH ---
 @app.post("/predict")
 def predict_iris(data: IrisInput):
     global latest_predicted_species
@@ -129,14 +90,8 @@ def predict_iris(data: IrisInput):
     ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung.")
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO predictions (timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (timestamp, f"SVM ({kernel})", data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
-    conn.commit()
-    conn.close()
+    # Gọi hàm lưu database từ file database.py
+    insert_prediction(timestamp, f"SVM ({kernel})", data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly)
 
     return {
         "prediction": prediction,
@@ -196,11 +151,7 @@ async def analyze_file(file: UploadFile = File(...)):
 
 @app.get("/logs")
 def get_logs():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
-    rows = cursor.fetchall()
-    conn.close()
+    rows = get_all_predictions()
     return [{
         "id": r[0], "timestamp": r[1], "model_used": r[2],
         "sepal_length": r[3], "sepal_width": r[4], "petal_length": r[5], "petal_width": r[6],
@@ -209,11 +160,7 @@ def get_logs():
 
 @app.get("/export/{format_type}")
 def export_data(format_type: str):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions")
-    rows = cursor.fetchall()
-    conn.close()
+    rows = get_all_predictions()
 
     if format_type == "json":
         data = [{"id": r[0], "timestamp": r[1], "model": r[2], "sepal_length": r[3], "prediction": r[7]} for r in rows]
@@ -226,7 +173,7 @@ def export_data(format_type: str):
         return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_export.csv"})
     raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 5. GIAO DIỆN WEB TÍCH HỢP ĐĂNG NHẬP / ĐĂNG KÝ ---
+# --- GIAO DIỆN WEB HOÀN CHỈNH ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -249,7 +196,7 @@ def get_dashboard():
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
-    <!-- KHUNG ĐĂNG NHẬP / ĐĂNG KÝ (HIỆN KHI CHƯA LOGIN) -->
+    <!-- KHUNG ĐĂNG NHẬP / ĐĂNG KÝ -->
     <div id="authModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="glass-card max-w-md w-full p-8 rounded-3xl space-y-6 bg-white shadow-2xl">
             <div class="text-center space-y-2">
@@ -280,7 +227,6 @@ def get_dashboard():
         </div>
     </div>
 
-    <!-- HEADER CHÍNH -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3.5 shadow-sm">
         <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div class="flex items-center space-x-3">
@@ -438,7 +384,6 @@ def get_dashboard():
     <script>
         let isRegistering = false;
 
-        // Kiểm tra trạng thái đăng nhập khi mở trang
         window.addEventListener('DOMContentLoaded', () => {
             const loggedUser = localStorage.getItem('iris_user');
             if (loggedUser) {
