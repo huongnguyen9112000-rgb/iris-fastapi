@@ -434,6 +434,49 @@ def get_dashboard():
             }
         }
     </script>
+    <script>
+const fileInput = document.getElementById('fileInput');
+const uploadBox = document.querySelector('.border-dashed'); // hoặc class của khung upload ảnh trên giao diện của bạn
+
+if (uploadBox && fileInput) {
+    uploadBox.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Hiển thị trạng thái đang xử lý nếu muốn
+        alert("Đang phân tích hình ảnh, vui lòng đợi...");
+
+        try {
+            const response = await fetch('/analyze-file', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.status === 'SUCCESS') {
+                const res = data.prediction_result;
+                // Cập nhật kết quả lên giao diện của bạn (ví dụ điền vào các text hiển thị loài hoa, độ tin cậy và báo cáo)
+                console.log("Kết quả:", res);
+                alert(`Nhận diện thành công: ${res.prediction} (Độ tin cậy: ${(res.confidence * 100).toFixed(1)}%)`);
+                
+                // Nếu trang web có các trường hiển thị kết quả, bạn có thể gán trực tiếp tại đây:
+                // document.getElementById('predictionResult').innerText = res.prediction;
+                // document.getElementById('aiReport').innerText = res.ai_report;
+            } else {
+                alert("Lỗi phân tích: " + (data.prediction_result?.ai_report || "Không rõ"));
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Lỗi kết nối tới server!");
+        }
+    });
+}
+</script>
 </body>
 </html>
     """
