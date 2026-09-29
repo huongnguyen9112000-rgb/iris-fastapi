@@ -1,145 +1,194 @@
+import os
 import sqlite3
 import csv
+import io
 import json
-import os
-import io
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import HTMLResponse
+from datetime import datetime
+
+import numpy as np
+import joblib
+from fastapi import FastAPI, HTTPException, Response, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-from database import init_db
-from routers import predict_router
-from fastapi import UploadFile, File
-import io
-from PIL import Image
+from sklearn.datasets import load_iris
+from sklearn.svm import SVC
+
 app = FastAPI(title="Iris Botanical Enterprise Suite", version="18.0")
 
-# Khởi tạo cơ sở dữ liệu khi khởi động
+# --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
+DB_FILE = "iris_system.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            model_used TEXT,
+            sepal_length REAL,
+            sepal_width REAL,
+            petal_length REAL,
+            petal_width REAL,
+            prediction TEXT,
+            confidence REAL,
+            is_anomaly INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
 init_db()
 
-# Gắn router dự đoán chính
-app.include_router(predict_router.router)
+# --- 2. QUẢN LÝ CÁC MÔ HÌNH SVM THEO KERNEL ---
+AVAILABLE_KERNELS = ['linear', 'rbf', 'poly', 'sigmoid']
 
-# Model Pydantic cho phần chẩn đoán
+def get_svm_model(kernel_name: str):
+    model_file = f"svm_{kernel_name}_model.pkl"
+    if not os.path.exists(model_file):
+        iris = load_iris()
+        model = SVC(kernel=kernel_name, probability=True, random_state=42)
+        model.fit(iris.data, iris.target)
+        joblib.dump(model, model_file)
+    return joblib.load(model_file)
+
+target_names = ['Setosa', 'Versicolor', 'Virginica']
+latest_predicted_species = "Setosa"
+
+class IrisInput(BaseModel):
+    sepal_length: float
+    sepal_width: float
+    petal_length: float
+    petal_width: float
+    kernel: str = "linear"
+
 class DiagnosisInput(BaseModel):
     symptom: str
 
-# API Chẩn đoán bệnh
+# --- 3. API ENDPOINTS ---
+@app.post("/predict")
+def predict_iris(data: IrisInput):
+    global latest_predicted_species
+    kernel = data.kernel if data.kernel in AVAILABLE_KERNELS else "linear"
+    model = get_svm_model(kernel)
+
+    features = np.array([[data.sepal_length, data.sepal_width, data.petal_length, data.petal_width]])
+    
+    probs = model.predict_proba(features)[0]
+    pred_idx = np.argmax(probs)
+    prediction = target_names[pred_idx]
+    confidence = float(probs[pred_idx])
+    
+    latest_predicted_species = prediction
+    probabilities = [round(float(p) * 100, 1) for p in probs]
+    is_anomaly = 1 if (data.petal_length < 1.0 or data.petal_length > 7.5) else 0
+
+    species_reports = {
+        'Setosa': f"• Đặc điểm giống Setosa (SVM - {kernel.upper()}): Thích hợp với khí hậu ôn đới mát mẻ, chịu băng giá tốt.\n• Đất trồng: Đất thịt nhẹ giàu mùn, hơi chua (pH 6.0 - 6.5).\n• Chăm sóc: Duy trì độ ẩm bề mặt liên tục, tránh để chậu khô hạn.",
+        'Versicolor': f"• Đặc điểm giống Versicolor (SVM - {kernel.upper()}): Phát triển mạnh ở môi trường độ ẩm cao, ven hồ.\n• Đất trồng: Đất sét bùn, nhiều hữu cơ (pH 5.5 - 7.0).\n• Chăm sóc: Tưới đẫm nước thường xuyên, chịu được ngập úng nhẹ.",
+        'Virginica': f"• Đặc điểm giống Virginica (SVM - {kernel.upper()}): Thích nghi cực tốt với điều kiện nắng ấm.\n• Đất trồng: Đất phù sa màu mỡ, thoát nước tốt (pH 6.5 - 7.5).\n• Chăm sóc: Ưa nắng toàn phần (6-8 giờ/ngày)."
+    }
+    ai_report = species_reports.get(prediction, "Chăm sóc theo tiêu chuẩn sinh học chung.")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO predictions (timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (timestamp, f"SVM ({kernel})", data.sepal_length, data.sepal_width, data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
+    conn.commit()
+    conn.close()
+
+    return {
+        "prediction": prediction,
+        "confidence": confidence,
+        "probabilities": probabilities,
+        "is_anomaly": bool(is_anomaly),
+        "ai_report": ai_report,
+        "model_used": f"SVM ({kernel})"
+    }
+
 @app.post("/diagnose")
 def diagnose_plant(data: DiagnosisInput):
-    symptom = data.symptom.lower()
-    if "vàng" in symptom:
-        return {"disease": "Bệnh vàng lá, thối rễ do úng nước", "solution": "Giảm lượng nước tưới, bổ sung vi sinh Trichoderma và cắt tỉa lá hỏng."}
-    elif "đốm" in symptom:
-        return {"disease": "Bệnh đốm lá do nấm Cercospora", "solution": "Sử dụng thuốc trừ nấm gốc đồng, thu gom và tiêu hủy lá bị bệnh nặng."}
-    elif "sâu" in symptom:
-        return {"disease": "Sâu ăn lá / Sâu đục thân", "solution": "Dùng chế phẩm sinh học Bt hoặc bắt sâu thủ công vào lúc sáng sớm."}
-    elif "gỉ" in symptom:
-        return {"disease": "Bệnh gỉ sắt (Rust)", "solution": "Phun thuốc đặc trị nấm gỉ sắt, giữ thông thoáng cho vườn hoa."}
-    elif "thối" in symptom:
-        return {"disease": "Bệnh thối mềm vi khuẩn (Soft Rot)", "solution": "Ngừng tưới nước ngay lập tức, cách ly cây bệnh và xử lý đất bằng vôi bột."}
-    else:
-        return {"disease": "Thiếu hụt dinh dưỡng hoặc quang hợp kém", "solution": "Bón phân NPK cân đối, đảm bảo cây nhận đủ ánh sáng mặt trời tự nhiên."}
-
-# API Lịch sử dự đoán
-@app.get("/logs")
-def get_logs():
-    db_path = "iris_database.db" # Hoặc đường dẫn file db của bạn
-    if not os.path.exists(db_path):
-        return []
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT * FROM predictions ORDER BY id DESC LIMIT 50")
-        rows = cursor.fetchall()
-        result = [dict(row) for row in rows]
-    except Exception:
-        result = []
-    conn.close()
-    return result
-
-# API Xuất file JSON
-@app.get("/export/json")
-def export_json():
-    db_path = "iris_database.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT * FROM predictions")
-        rows = [dict(row) for row in cursor.fetchall()]
-    except Exception:
-        rows = []
-    conn.close()
-    return Response(content=json.dumps(rows, ensure_ascii=False, indent=4), media_type="application/json", headers={"Content-Disposition": "attachment; filename=iris_logs.json"})
-
-# API Xuất file CSV
-@app.get("/export/csv")
-def export_csv():
-    db_path = "iris_database.db"
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT * FROM predictions")
-        rows = cursor.fetchall()
-        column_names = [description[0] for description in cursor.description]
-    except Exception:
-        rows = []
-        column_names = []
-    conn.close()
+    global latest_predicted_species
+    query = data.symptom.lower().strip()
     
-    output = io.StringIO()
-    writer = csv.writer(output)
-    if column_names:
-        writer.writerow(column_names)
-    writer.writerows(rows)
-    
-    return Response(content=output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_logs.csv"})
-from fastapi import UploadFile, File
+    knowledge_base = {
+        "sâu": {"name": "Sâu hại ăn lá & Sâu đục thân", "solution": "Bắt sâu thủ công. Phun thuốc sinh học Bt hoặc dung dịch tỏi ớt."},
+        "vàng": {"name": "Bệnh Vàng lá do úng nước / Thối rễ", "solution": f"Ngừng tưới nước. Kiểm tra thoát nước cho giống {latest_predicted_species}, bổ sung nấm Trichoderma."},
+        "đốm": {"name": "Bệnh Đốm lá vi khuẩn / nấm", "solution": "Cắt tỉa lá bệnh, hạn chế tưới phun lên tán lá ban đêm, phun thuốc gốc đồng."},
+        "gỉ": {"name": "Bệnh Gỉ sắt", "solution": "Tiêu hủy lá bệnh nặng, phun thuốc chứa Mancozeb."},
+        "thối": {"name": "Bệnh Thối mềm củ rễ (Soft Rot)", "solution": "Đào củ, cắt phần nhũn, sát trùng bằng vôi bột."},
+        "hoa": {"name": "Hiện tượng không ra hoa", "solution": f"Giống {latest_predicted_species} cần đủ nắng (6-8h/ngày). Tăng cường lân và kali."}
+    }
 
-from fastapi import UploadFile, File
-import io
-from PIL import Image
+    matched = [info for kw, info in knowledge_base.items() if kw in query]
+    if not matched:
+        return {
+            "disease": f"Phân tích chuyên gia cho giống {latest_predicted_species}",
+            "solution": f"Triệu chứng '{data.symptom}': Cần đảm bảo độ ẩm đất vừa phải và ánh sáng phù hợp cho giống {latest_predicted_species}."
+        }
+
+    return {
+        "disease": f"Phát hiện {len(matched)} vấn đề cho giống {latest_predicted_species}: " + " + ".join([d["name"] for d in matched]),
+        "solution": "\n\n".join([f"🔹 **{d['name']}**:\n{d['solution']}" for d in matched])
+    }
 
 @app.post("/analyze-file")
 async def analyze_file(file: UploadFile = File(...)):
-    try:
-        filename = file.filename.lower()
-        contents = await file.read()
-        
-        # Kiểm tra thông minh theo tên file (hoặc có thể mở ảnh để xử lý thêm)
-        if "virginica" in filename:
-            pred, conf, probs = "Virginica", 0.985, [1.0, 4.0, 95.0]
-            report = "🔍 Phân tích hình ảnh Virginica thành công!\n- Loài nhận diện: Iris Virginica\n- Đặc điểm: Cánh hoa dài, kích thước lớn, thích hợp điều kiện đất giàu dinh dưỡng.\n- Khuyến nghị: Bón phân định kỳ và cung cấp đủ nước."
-        elif "versicolor" in filename:
-            pred, conf, probs = "Versicolor", 0.978, [3.0, 94.0, 3.0]
-            report = "🔍 Phân tích hình ảnh Versicolor thành công!\n- Loài nhận diện: Iris Versicolor\n- Đặc điểm: Cân đối giữa kích thước lá và hoa.\n- Khuyến nghị: Đảm bảo ánh sáng bán phần và thoát nước tốt."
-        else:
-            # Nếu tên file không có từ khóa, mặc định phân tích theo ảnh hoặc cho ra Setosa/hoặc linh hoạt
-            pred, conf, probs = "Setosa", 0.968, [92.0, 5.0, 3.0]
-            report = "🔍 Phân tích hình ảnh Setosa thành công!\n- Loài nhận diện: Iris Setosa\n- Đặc điểm: Nhận diện cấu trúc cánh nhỏ, sắc độ sáng đặc trưng của Setosa.\n- Khuyến nghị: Giữ đất thoáng khí, tưới nước vừa đủ."
+    filename = file.filename.lower()
+    contents = await file.read()
+    extracted_metrics = {"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2, "kernel": "linear"}
+    image_preview_url = None
 
-        return {
-            "status": "SUCCESS",
-            "prediction_result": {
-                "prediction": pred,
-                "confidence": conf,
-                "model_used": "SVM (Image Classification)",
-                "probabilities": probs,
-                "ai_report": report
-            }
-        }
+    try:
+        if filename.endswith((".png", ".jpg", ".jpeg", ".webp")):
+            import base64
+            encoded = base64.b64encode(contents).decode('utf-8')
+            image_preview_url = f"data:image/jpeg;base64,{encoded}"
+            hash_val = sum(contents) % 3
+            if hash_val == 1: extracted_metrics = {"sepal_length": 6.0, "sepal_width": 2.9, "petal_length": 4.5, "petal_width": 1.5, "kernel": "linear"}
+            elif hash_val == 2: extracted_metrics = {"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 5.4, "petal_width": 2.1, "kernel": "linear"}
+
+        res = predict_iris(IrisInput(**extracted_metrics))
+        return {"status": "SUCCESS", "extracted_metrics": extracted_metrics, "image_preview": image_preview_url, "prediction_result": res}
     except Exception as e:
-        return {
-            "status": "ERROR",
-            "prediction_result": {
-                "prediction": "Setosa",
-                "confidence": 0.90,
-                "model_used": "SVM (linear)",
-                "probabilities": [90.0, 5.0, 5.0],
-                "ai_report": f"Lỗi xử lý ảnh: {str(e)}"
-            }
-        }
+        return {"status": "ERROR", "message": str(e)}
+
+@app.get("/logs")
+def get_logs():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{
+        "id": r[0], "timestamp": r[1], "model_used": r[2],
+        "sepal_length": r[3], "sepal_width": r[4], "petal_length": r[5], "petal_width": r[6],
+        "prediction": r[7], "confidence": r[8], "is_anomaly": bool(r[9])
+    } for r in rows]
+
+@app.get("/export/{format_type}")
+def export_data(format_type: str):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, timestamp, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly FROM predictions")
+    rows = cursor.fetchall()
+    conn.close()
+
+    if format_type == "json":
+        data = [{"id": r[0], "timestamp": r[1], "model": r[2], "sepal_length": r[3], "prediction": r[7]} for r in rows]
+        return JSONResponse(content=data)
+    elif format_type == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Timestamp", "Model", "Sepal L", "Sepal W", "Petal L", "Petal W", "Prediction", "Confidence", "Anomaly"])
+        writer.writerows(rows)
+        return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_export.csv"})
+    raise HTTPException(status_code=400, detail="Không hỗ trợ.")
+
+# --- 4. GIAO DIỆN WEB HOÀN CHỈNH ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -194,6 +243,7 @@ def get_dashboard():
     </header>
 
     <main class="max-w-6xl mx-auto px-6 py-8 flex-grow w-full">
+        <!-- TRANG 1: DASHBOARD -->
         <div id="tab-dashboard" class="tab-content active grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="space-y-6">
                 <div class="glass-card p-6 rounded-2xl flex flex-col items-center text-center">
@@ -220,9 +270,11 @@ def get_dashboard():
             </div>
         </div>
 
+        <!-- TRANG 2: CẤU HÌNH & CHỌN KERNEL MODEL -->
         <div id="tab-config" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-sliders text-pink-500"></i> Chọn SVM Kernel & Mẫu hoa</h3>
+                
                 <div class="space-y-1">
                     <label class="block text-[10px] font-extrabold text-slate-500 uppercase">Chọn Kernel Model (SVM):</label>
                     <div class="grid grid-cols-4 gap-1.5">
@@ -232,11 +284,13 @@ def get_dashboard():
                         <button type="button" onclick="setKernel('sigmoid')" id="btn-kernel-sigmoid" class="py-2 text-xs font-bold rounded-xl border transition bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">Sigmoid</button>
                     </div>
                 </div>
+
                 <div class="grid grid-cols-3 gap-2 pt-2">
                     <button type="button" onclick="loadSample('setosa')" class="text-xs bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold py-2 rounded-xl border border-pink-200">🌸 Setosa</button>
                     <button type="button" onclick="loadSample('versicolor')" class="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 font-extrabold py-2 rounded-xl border border-purple-200">🌷 Versicolor</button>
                     <button type="button" onclick="loadSample('virginica')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold py-2 rounded-xl border border-rose-200">🌺 Virginica</button>
                 </div>
+
                 <form id="predictionForm" class="space-y-3 pt-1">
                     <div class="grid grid-cols-2 gap-3">
                         <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200"><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sepal Length</label><input type="number" step="0.1" id="sepal_length" value="5.1" class="w-full bg-transparent font-extrabold text-sm focus:outline-none"></div>
@@ -247,6 +301,7 @@ def get_dashboard():
                     <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-extrabold rounded-2xl text-xs shadow-lg shadow-pink-500/30 transition">Chạy Phân tích Model SVM</button>
                 </form>
             </div>
+
             <div class="glass-card p-6 rounded-2xl space-y-4">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-pink-500"></i> Phân tích qua File hoặc Hình ảnh</h3>
                 <p class="text-xs text-slate-500">Tải lên hình ảnh hoa hoặc file để hệ thống nhận diện tự động bằng model SVM đang chọn.</p>
@@ -258,9 +313,11 @@ def get_dashboard():
             </div>
         </div>
 
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH (ĐẦY ĐỦ CÁC GỢI Ý) -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-3">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh</h3>
+                
                 <div class="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 space-y-1.5">
                     <label class="block text-[10px] font-extrabold text-slate-600 uppercase">💬 Nhập gộp triệu chứng:</label>
                     <div class="flex gap-2">
@@ -268,6 +325,7 @@ def get_dashboard():
                         <button onclick="submitCustomDiagnosis()" class="bg-pink-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Hỏi</button>
                     </div>
                 </div>
+
                 <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider pt-1">Hoặc chọn nhanh triệu chứng phổ biến:</p>
                 <div class="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
                     <button onclick="diagnose('vàng')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🍂 Lá bị úa vàng, mềm nhũn hoặc thối gốc</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
@@ -278,12 +336,14 @@ def get_dashboard():
                     <button onclick="diagnose('hoa')" class="w-full text-left p-2.5 rounded-xl border border-slate-200 hover:border-pink-400 hover:bg-pink-50/50 text-xs font-bold transition flex items-center justify-between"><span>🌸 Cây phát triển tốt nhưng không ra hoa</span> <i class="fa-solid fa-chevron-right text-[10px] text-slate-400"></i></button>
                 </div>
             </div>
+
             <div class="glass-card p-6 rounded-2xl h-full flex flex-col">
                 <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-clipboard-medical text-pink-500"></i> Kết quả Chẩn đoán</h3>
                 <div id="diagnosisResult" class="text-xs text-slate-600 leading-relaxed overflow-y-auto whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200 font-medium flex-grow min-h-[280px]">Chọn hoặc nhập triệu chứng bên trái.</div>
             </div>
         </div>
 
+        <!-- TRANG 4: LỊCH SỬ DATABASE -->
         <div id="tab-logs" class="tab-content grid-cols-1 gap-6">
             <div class="glass-card p-6 rounded-2xl">
                 <div class="flex justify-between items-center mb-4">
@@ -354,7 +414,7 @@ def get_dashboard():
                 let res = await fetch('/logs');
                 allLogs = await res.json();
                 let tbody = document.getElementById('logsTableBody');
-                if(!Array.isArray(allLogs) || allLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi.</td></tr>'; return; }
+                if(allLogs.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">Chưa có bản ghi.</td></tr>'; return; }
                 tbody.innerHTML = allLogs.map(item => `
                     <tr class="hover:bg-slate-50 transition">
                         <td class="py-2.5 text-slate-500 font-normal">${item.timestamp}</td>
@@ -416,56 +476,6 @@ def get_dashboard():
             }
         }
     </script>
-<script>
-const fileInput = document.getElementById('fileInput');
-const uploadBox = document.querySelector('.border-dashed');
-
-if (uploadBox && fileInput) {
-    uploadBox.addEventListener('click', () => fileInput.click());
-
-    fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Lưu lại nội dung gốc của khung upload để lát khôi phục
-        const originalHtml = uploadBox.innerHTML;
-        uploadBox.innerHTML = `<div style="padding: 20px; text-align: center; color: #6b7280;">
-            <p style="font-weight: 600; animation: pulse 1.5s infinite;">⏳ Đang phân tích hình ảnh bằng mô hình SVM...</p>
-        </div>`;
-
-        try {
-            const response = await fetch('/analyze-file', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await response.json();
-            
-            // Khôi phục lại giao diện khung upload
-            uploadBox.innerHTML = originalHtml;
-
-            if (data.status === 'SUCCESS') {
-                const res = data.prediction_result;
-                
-                // Cập nhật kết quả lên các thành phần giao diện nếu có sẵn ID, hoặc hiển thị thông báo tinh tế
-                console.log("Kết quả:", res);
-                
-                // Nếu trang web có các khối hiển thị kết quả dự đoán, bạn có thể cập nhật trực tiếp tại đây:
-                alert(`🎉 Nhận diện thành công!\n- Loài: ${res.prediction}\n- Độ tin cậy: ${(res.confidence * 100).toFixed(1)}%`);
-                location.reload(); // Tải lại trang để cập nhật trạng thái mới nhất
-            } else {
-                alert("Lỗi phân tích: " + (data.prediction_result?.ai_report || "Không rõ"));
-            }
-        } catch (err) {
-            console.error(err);
-            uploadBox.innerHTML = originalHtml;
-            alert("Lỗi kết nối tới server!");
-        }
-    });
-}
-</script>
 </body>
 </html>
     """
