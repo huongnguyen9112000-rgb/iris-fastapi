@@ -13,14 +13,15 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.svm import SVC
 
-app = FastAPI(title="Iris Botanical Enterprise Suite", version="18.0")
+app = FastAPI(title="Iris Botanical Enterprise Suite", version="19.0")
 
-# --- 1. CƠ SỞ DỮ LIỆU SQLITE ---
+# --- 1. CƠ SỞ DỮ LIỆU SQLITE (Thêm bảng users cho Đăng ký/Đăng nhập) ---
 DB_FILE = "iris_system.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    # Bảng lưu lịch sử dự đoán
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS predictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,6 +34,14 @@ def init_db():
             prediction TEXT,
             confidence REAL,
             is_anomaly INTEGER
+        )
+    ''')
+    # Bảng lưu tài khoản người dùng
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT
         )
     ''')
     conn.commit()
@@ -65,7 +74,36 @@ class IrisInput(BaseModel):
 class DiagnosisInput(BaseModel):
     symptom: str
 
-# --- 3. API ENDPOINTS ---
+class UserAuthInput(BaseModel):
+    username: str
+    password: str
+
+# --- 3. API AUTHENTICATION (Đăng ký & Đăng nhập) ---
+@app.post("/api/register")
+def register_user(data: UserAuthInput):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (data.username.strip(), data.password))
+        conn.commit()
+        conn.close()
+        return {"status": "SUCCESS", "message": "Đăng ký thành công!"}
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=400, detail="Tên đăng nhập đã tồn tại!")
+
+@app.post("/api/login")
+def login_user(data: UserAuthInput):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (data.username.strip(), data.password))
+    user = cursor.fetchone()
+    conn.close()
+    if user:
+        return {"status": "SUCCESS", "message": "Đăng nhập thành công!", "username": user[1]}
+    raise HTTPException(status_code=400, detail="Sai tên đăng nhập hoặc mật khẩu!")
+
+# --- 4. API ENDPOINTS CHÍNH ---
 @app.post("/predict")
 def predict_iris(data: IrisInput):
     global latest_predicted_species
@@ -188,7 +226,7 @@ def export_data(format_type: str):
         return Response(output.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=iris_export.csv"})
     raise HTTPException(status_code=400, detail="Không hỗ trợ.")
 
-# --- 4. GIAO DIỆN WEB HOÀN CHỈNH ---
+# --- 5. GIAO DIỆN WEB TÍCH HỢP ĐĂNG NHẬP / ĐĂNG KÝ ---
 @app.get("/", response_class=HTMLResponse)
 def get_dashboard():
     return """
@@ -211,6 +249,38 @@ def get_dashboard():
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
+    <!-- KHUNG ĐĂNG NHẬP / ĐĂNG KÝ (HIỆN KHI CHƯA LOGIN) -->
+    <div id="authModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-card max-w-md w-full p-8 rounded-3xl space-y-6 bg-white shadow-2xl">
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-pink-500/30">
+                    <i class="fa-solid fa-seedling text-lg"></i>
+                </div>
+                <h2 id="authTitle" class="text-xl font-black text-slate-900">Đăng nhập hệ thống</h2>
+                <p class="text-xs text-slate-500">Iris Botanical Enterprise Suite</p>
+            </div>
+
+            <div id="authError" class="hidden bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold p-3 rounded-xl text-center"></div>
+
+            <form id="authForm" onsubmit="handleAuth(event)" class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Tên đăng nhập</label>
+                    <input type="text" id="authUsername" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-extrabold text-slate-500 uppercase mb-1">Mật khẩu</label>
+                    <input type="password" id="authPassword" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-pink-500">
+                </div>
+                <button type="submit" id="authSubmitBtn" class="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white font-extrabold rounded-xl text-xs shadow-lg shadow-pink-500/30 transition">Đăng nhập</button>
+            </form>
+
+            <div class="text-center pt-2">
+                <button type="button" onclick="toggleAuthMode()" id="authSwitchBtn" class="text-xs font-bold text-pink-600 hover:underline">Chưa có tài khoản? Đăng ký ngay</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER CHÍNH -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-3.5 shadow-sm">
         <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
             <div class="flex items-center space-x-3">
@@ -232,12 +302,15 @@ def get_dashboard():
                 <button onclick="switchTab('logs')" id="nav-logs" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition text-slate-600 hover:text-slate-900"><i class="fa-solid fa-database mr-1"></i> Lịch sử</button>
             </nav>
 
-            <div class="relative">
-                <button onclick="toggleDropdown()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm"><i class="fa-solid fa-download"></i> Xuất file <i class="fa-solid fa-chevron-down text-[10px]"></i></button>
-                <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50">
-                    <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
-                    <a href="/export/csv" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-csv mr-2 text-emerald-500"></i> Tải CSV</a>
+            <div class="flex items-center gap-2">
+                <div class="relative">
+                    <button onclick="toggleDropdown()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition flex items-center gap-2 shadow-sm"><i class="fa-solid fa-download"></i> Xuất file <i class="fa-solid fa-chevron-down text-[10px]"></i></button>
+                    <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50">
+                        <a href="/export/json" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-code mr-2 text-pink-500"></i> Tải JSON</a>
+                        <a href="/export/csv" class="block px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-pink-50"><i class="fa-solid fa-file-csv mr-2 text-emerald-500"></i> Tải CSV</a>
+                    </div>
                 </div>
+                <button onclick="logout()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl text-xs transition" title="Đăng xuất"><i class="fa-solid fa-right-from-bracket"></i></button>
             </div>
         </div>
     </header>
@@ -313,7 +386,7 @@ def get_dashboard():
             </div>
         </div>
 
-        <!-- TRANG 3: CHẨN ĐOÁN BỆNH (ĐẦY ĐỦ CÁC GỢI Ý) -->
+        <!-- TRANG 3: CHẨN ĐOÁN BỆNH -->
         <div id="tab-diagnosis" class="tab-content grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div class="glass-card p-6 rounded-2xl space-y-3">
                 <h3 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-stethoscope text-pink-500"></i> Trợ lý Chẩn đoán Bệnh</h3>
@@ -363,6 +436,63 @@ def get_dashboard():
     <footer class="text-center py-4 text-xs text-slate-400 font-medium border-t border-slate-200 bg-white">Iris Botanical Enterprise Suite &bull; FastAPI & Scikit-Learn SVM Multi-Kernel</footer>
 
     <script>
+        let isRegistering = false;
+
+        // Kiểm tra trạng thái đăng nhập khi mở trang
+        window.addEventListener('DOMContentLoaded', () => {
+            const loggedUser = localStorage.getItem('iris_user');
+            if (loggedUser) {
+                document.getElementById('authModal').classList.add('hidden');
+            }
+        });
+
+        function toggleAuthMode() {
+            isRegistering = !isRegistering;
+            document.getElementById('authTitle').innerText = isRegistering ? "Đăng ký tài khoản mới" : "Đăng nhập hệ thống";
+            document.getElementById('authSubmitBtn').innerText = isRegistering ? "Đăng ký" : "Đăng nhập";
+            document.getElementById('authSwitchBtn').innerText = isRegistering ? "Đã có tài khoản? Đăng nhập ngay" : "Chưa có tài khoản? Đăng ký ngay";
+            document.getElementById('authError').classList.add('hidden');
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('authUsername').value;
+            const password = document.getElementById('authPassword').value;
+            const endpoint = isRegistering ? '/api/register' : '/api/login';
+            
+            const errDiv = document.getElementById('authError');
+            errDiv.classList.add('hidden');
+
+            try {
+                let res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username, password })
+                });
+                let data = await res.json();
+                if(res.ok) {
+                    if(isRegistering) {
+                        alert("Đăng ký thành công! Vui lòng đăng nhập.");
+                        toggleAuthMode();
+                    } else {
+                        localStorage.setItem('iris_user', data.username);
+                        document.getElementById('authModal').classList.add('hidden');
+                    }
+                } else {
+                    errDiv.innerText = data.detail || "Có lỗi xảy ra!";
+                    errDiv.classList.remove('hidden');
+                }
+            } catch(err) {
+                errDiv.innerText = "Lỗi kết nối đến server!";
+                errDiv.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('iris_user');
+            location.reload();
+        }
+
         let selectedKernel = 'linear';
         let allLogs = [];
         const ctxProb = document.getElementById('probChart').getContext('2d');
