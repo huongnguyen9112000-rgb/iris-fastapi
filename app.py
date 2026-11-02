@@ -12,7 +12,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Response, UploadFile, File, Depends, Header
 from fastapi.responses import HTMLResponse, JSONResponse
 from jose import JWTError, jwt
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sklearn.datasets import load_iris
 from sklearn.ensemble import IsolationForest
 from sklearn.svm import SVC
@@ -118,7 +118,7 @@ def get_current_user(authorization: Optional[str] = Header(None)):
 # ==================== SCHEMAS ====================
 class RegisterInput(BaseModel):
     username: str = Field(..., min_length=3, max_length=30)
-    email: EmailStr
+    email: str = Field(..., min_length=5)          # ← đổi từ EmailStr thành str
     password: str = Field(..., min_length=8)
 
 class LoginInput(BaseModel):
@@ -138,8 +138,13 @@ class DiagnosisInput(BaseModel):
 # ==================== AUTH API ====================
 @app.post("/api/register")
 def register(data: RegisterInput):
+    if "@" not in data.email or "." not in data.email:
+        raise HTTPException(status_code=400, detail="Email không hợp lệ")
+    
     if len(data.password) < 8:
         raise HTTPException(status_code=400, detail="Mật khẩu phải có ít nhất 8 ký tự")
+    
+    # ... phần còn lại giữ nguyên
     conn = get_conn()
     cur = conn.cursor()
     try:
