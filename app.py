@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.svm import SVC
 
-app = FastAPI(title="Iris Botanica — Personal Studio", version="23.1")
+app = FastAPI(title="Iris Botanica — Personal Studio", version="23.2")
 
 DB_FILE = "iris_system.db"
 
@@ -156,12 +156,13 @@ def predict_iris(data: IrisInput):
     report = species_reports.get(prediction, {})
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db_user = data.username if data.username else "guest"
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO predictions (timestamp, username, model_used, sepal_length, sepal_width, petal_length, petal_width, prediction, confidence, is_anomaly)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (timestamp, data.username, f"SVM ({kernel})", data.sepal_length, data.sepal_width,
+    ''', (timestamp, db_user, f"SVM ({kernel})", data.sepal_length, data.sepal_width,
           data.petal_length, data.petal_width, prediction, confidence, is_anomaly))
     conn.commit()
     conn.close()
@@ -222,11 +223,10 @@ def diagnose_plant(data: DiagnosisInput):
     }
 
 @app.post("/analyze-file")
-async def analyze_file(file: UploadFile = File(...)):
+async def analyze_file(file: UploadFile = File(...), username: str = "guest"):
     filename = file.filename.lower()
     contents = await file.read()
     try:
-        # Xử lý file Ảnh
         if filename.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
             image = Image.open(io.BytesIO(contents)).convert("RGB").resize((120, 120))
             img_arr = np.array(image)
@@ -237,7 +237,6 @@ async def analyze_file(file: UploadFile = File(...)):
             r_ratio = r_mean / color_sum
             b_ratio = b_mean / color_sum
             
-            # Phân loại dựa trên phổ màu & độ sáng
             if b_ratio > 0.35 and brightness < 110:
                 sepal_l, sepal_w, petal_l, petal_w = 6.5, 3.0, 5.8, 2.2  # Virginica
             elif r_ratio > 0.33 or brightness > 130:
@@ -250,9 +249,10 @@ async def analyze_file(file: UploadFile = File(...)):
                 "sepal_width": round(float(sepal_w), 1),
                 "petal_length": round(float(petal_l), 1),
                 "petal_width": round(float(petal_w), 1),
-                "kernel": "rbf"
+                "kernel": "rbf",
+                "username": username
             }
-            res = predict_iris(IrisInput(**metrics, username="guest"))
+            res = predict_iris(IrisInput(**metrics))
             return {
                 "status": "SUCCESS",
                 "message": "Phân tích ảnh hoàn tất!",
@@ -260,34 +260,29 @@ async def analyze_file(file: UploadFile = File(...)):
                 "prediction_result": res
             }
 
-        # Xử lý file JSON hoặc CSV
         text = contents.decode("utf-8", errors="ignore")
         if filename.endswith(".json"):
             parsed_data = json.loads(text)
-            # Hỗ trợ cả JSON object đơn lẻ lẫn JSON dạng list
             data = parsed_data[0] if isinstance(parsed_data, list) and len(parsed_data) > 0 else parsed_data
             metrics = {
                 "sepal_length": float(data.get("sepal_length", data.get("sepalLength", 5.1))),
                 "sepal_width": float(data.get("sepal_width", data.get("sepalWidth", 3.5))),
                 "petal_length": float(data.get("petal_length", data.get("petalLength", 1.4))),
                 "petal_width": float(data.get("petal_width", data.get("petalWidth", 0.2))),
-                "kernel": data.get("kernel", "rbf")
+                "kernel": data.get("kernel", "rbf"),
+                "username": username
             }
-        else:  # CSV
+        else:
             lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
             if not lines:
                 raise ValueError("File CSV trống!")
-            
-            # Kiểm tra xem dòng đầu tiên có phải là chữ (header) hay số trực tiếp
             first_row = lines[0].split(",")
             try:
                 float(first_row[0])
-                # Không có header, dòng đầu là data luôn
                 vals = first_row
             except ValueError:
-                # Có header, lấy dòng thứ 2
                 if len(lines) < 2:
-                    raise ValueError("CSV thiếu dòng dữ liệu")
+                    raise ValueError("CSV thiếu dữ liệu")
                 vals = lines[1].split(",")
 
             metrics = {
@@ -295,10 +290,11 @@ async def analyze_file(file: UploadFile = File(...)):
                 "sepal_width": float(vals[1]),
                 "petal_length": float(vals[2]),
                 "petal_width": float(vals[3]),
-                "kernel": "rbf"
+                "kernel": "rbf",
+                "username": username
             }
 
-        res = predict_iris(IrisInput(**metrics, username="guest"))
+        res = predict_iris(IrisInput(**metrics))
         return {"status": "SUCCESS", "message": "Đọc file thành công!", "extracted_metrics": metrics, "prediction_result": res}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
@@ -663,7 +659,7 @@ def get_dashboard():
 
       <div class="card p-6 space-y-4">
         <h3 class="font-display text-lg font-semibold">Tải file & Phân tích ảnh</h3>
-        <p class="text-sm text-[var(--muted)] leading-relaxed">Hỗ trợ file CSV/JSON hoặc ảnh chụp hoa (hệ thống sẽ phân tích màu sắc và trích xuất đặc trưng hình thái để dự đoán).</p>
+        <p class="text-sm text-[var(--muted)] leading-relaxed">Hỗ trợ file CSV/JSON hoặc ảnh chụp hoa.</p>
         <div class="border-2 border-dashed border-[var(--border)] hover:border-[var(--accent)] rounded-2xl p-10 text-center cursor-pointer transition bg-[var(--bg)]" onclick="document.getElementById('fileInput').click()">
           <i class="fa-solid fa-file-arrow-up text-2xl text-[var(--muted)] mb-3"></i>
           <p class="text-sm font-medium" id="uploadStatusText">Tải lên ảnh hoa / CSV / JSON</p>
@@ -772,11 +768,12 @@ def get_dashboard():
 <script>
   let isRegistering = false;
   let selectedKernel = 'rbf';
-  let currentUser = localStorage.getItem('iris_user') || null;
+  let currentUser = localStorage.getItem('iris_user') || 'guest';
   let speciesChart = null;
 
   window.addEventListener('DOMContentLoaded', () => {
-    if (currentUser) {
+    if (localStorage.getItem('iris_user')) {
+      currentUser = localStorage.getItem('iris_user');
       document.getElementById('authModal').classList.add('hidden');
       document.getElementById('userGreeting').innerText = currentUser;
     }
@@ -973,7 +970,7 @@ def get_dashboard():
       petal_length: parseFloat(document.getElementById('petal_length').value),
       petal_width: parseFloat(document.getElementById('petal_width').value),
       kernel: selectedKernel,
-      username: currentUser || 'guest'
+      username: currentUser
     };
     const res = await fetch('/predict', {
       method: 'POST',
@@ -992,7 +989,7 @@ def get_dashboard():
       sepal_width: parseFloat(document.getElementById('sepal_width').value) || 3.5,
       petal_length: parseFloat(document.getElementById('petal_length').value) || 1.4,
       petal_width: parseFloat(document.getElementById('petal_width').value) || 0.2,
-      username: currentUser || 'guest'
+      username: currentUser
     };
     const res = await fetch('/compare', {
       method: 'POST',
@@ -1036,7 +1033,7 @@ def get_dashboard():
   }
 
   async function loadLogs() {
-    const url = currentUser ? `/logs?username=${encodeURIComponent(currentUser)}` : '/logs';
+    const url = `/logs?username=${encodeURIComponent(currentUser)}`;
     const res = await fetch(url);
     const allLogs = await res.json();
     const tbody = document.getElementById('logsTableBody');
@@ -1056,7 +1053,7 @@ def get_dashboard():
   }
 
   async function loadStats() {
-    const url = currentUser ? `/stats?username=${encodeURIComponent(currentUser)}` : '/stats';
+    const url = `/stats?username=${encodeURIComponent(currentUser)}`;
     const res = await fetch(url);
     const s = await res.json();
     document.getElementById('statTotal').innerText = s.total;
@@ -1085,7 +1082,7 @@ def get_dashboard():
   }
 
   function exportData(fmt) {
-    const q = currentUser ? `?username=${encodeURIComponent(currentUser)}` : '';
+    const q = `?username=${encodeURIComponent(currentUser)}`;
     window.open(`/export/${fmt}${q}`, '_blank');
   }
 
@@ -1095,7 +1092,7 @@ def get_dashboard():
     const formData = new FormData();
     formData.append('file', file);
     document.getElementById('uploadStatusText').innerText = 'Đang xử lý file & trích xuất dữ liệu...';
-    const res = await fetch('/analyze-file', { method: 'POST', body: formData });
+    const res = await fetch(`/analyze-file?username=${encodeURIComponent(currentUser)}`, { method: 'POST', body: formData });
     const data = await res.json();
     if (data.status === 'SUCCESS') {
       updateUI(data.prediction_result);
