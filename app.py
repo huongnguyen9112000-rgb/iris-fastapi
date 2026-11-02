@@ -497,33 +497,326 @@ def my_predictions(
         }
         for r in data
     ]
+
+
 from fastapi.responses import HTMLResponse
 
 @app.get("/", response_class=HTMLResponse)
-def home():
+async def dashboard():
 
     return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Iris AI Analytics Platform</title>
-    </head>
+<!DOCTYPE html>
+<html lang="vi">
 
-    <body style="
-        font-family:Arial;
-        text-align:center;
-        padding:100px;
-        background:#f8fafc;
-    ">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-        <h1>Iris AI Analytics Platform</h1>
+<title>Iris AI Analytics Platform</title>
 
-        <p>Backend đang hoạt động thành công ✅</p>
+<script src="https://cdn.tailwindcss.com"></script>
 
-        <a href="/docs">
-            Swagger API
-        </a>
+<style>
+body{
+    background:#0f172a;
+}
+.glass{
+    background:rgba(255,255,255,.06);
+    backdrop-filter:blur(16px);
+    border:1px solid rgba(255,255,255,.08);
+}
+</style>
 
-    </body>
-    </html>
-    """
+</head>
+
+<body class="min-h-screen text-white">
+
+<!-- NAVBAR -->
+
+<nav class="border-b border-slate-800 bg-slate-950">
+
+<div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+
+<div>
+<h1 class="font-black text-2xl">
+🌸 Iris AI Analytics
+</h1>
+</div>
+
+<div class="flex gap-3">
+
+<button onclick="showLogin()"
+class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700">
+Đăng nhập
+</button>
+
+<button onclick="showRegister()"
+class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700">
+Đăng ký
+</button>
+
+</div>
+
+</div>
+
+</nav>
+
+<!-- HERO -->
+
+<section class="max-w-7xl mx-auto px-6 py-16">
+
+<div class="grid lg:grid-cols-2 gap-12 items-center">
+
+<div>
+
+<h2 class="text-6xl font-black leading-tight">
+Plant Intelligence
+Powered By AI
+</h2>
+
+<p class="mt-6 text-slate-400 text-lg">
+Nền tảng phân tích và nhận dạng Iris sử dụng
+Machine Learning, SVM Multi Kernel,
+Anomaly Detection và hệ thống báo cáo thông minh.
+</p>
+
+<div class="flex gap-4 mt-8">
+
+<button onclick="showLogin()"
+class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl font-bold">
+Bắt đầu
+</button>
+
+<a href="/docs"
+class="bg-slate-800 hover:bg-slate-700 px-6 py-3 rounded-xl font-bold">
+Swagger API
+</a>
+
+</div>
+
+</div>
+
+<div>
+
+<div class="glass rounded-3xl p-8">
+
+<h3 class="font-bold text-xl mb-6">
+Hệ thống AI
+</h3>
+
+<div class="grid grid-cols-2 gap-4">
+
+<div class="bg-slate-900 rounded-2xl p-5">
+<div class="text-3xl font-black text-blue-400">
+4
+</div>
+<div class="text-slate-400 text-sm mt-1">
+SVM Kernels
+</div>
+</div>
+
+<div class="bg-slate-900 rounded-2xl p-5">
+<div class="text-3xl font-black text-green-400">
+99%
+</div>
+<div class="text-slate-400 text-sm mt-1">
+Accuracy
+</div>
+</div>
+
+<div class="bg-slate-900 rounded-2xl p-5">
+<div class="text-3xl font-black text-purple-400">
+JWT
+</div>
+<div class="text-slate-400 text-sm mt-1">
+Authentication
+</div>
+</div>
+
+<div class="bg-slate-900 rounded-2xl p-5">
+<div class="text-3xl font-black text-pink-400">
+AI
+</div>
+<div class="text-slate-400 text-sm mt-1">
+Diagnosis
+</div>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- LOGIN MODAL -->
+
+<div id="loginModal"
+class="hidden fixed inset-0 bg-black/70 flex justify-center items-center p-4">
+
+<div class="bg-slate-900 w-full max-w-md rounded-3xl p-8">
+
+<h2 class="text-2xl font-black mb-6">
+Đăng nhập
+</h2>
+
+<input
+id="loginUsername"
+placeholder="Tên đăng nhập"
+class="w-full mb-4 bg-slate-800 rounded-xl p-3">
+
+<input
+id="loginPassword"
+type="password"
+placeholder="Mật khẩu"
+class="w-full mb-4 bg-slate-800 rounded-xl p-3">
+
+<button
+onclick="login()"
+class="w-full bg-blue-600 py-3 rounded-xl font-bold">
+Đăng nhập
+</button>
+
+<button
+onclick="closeModal()"
+class="w-full mt-3 bg-slate-700 py-3 rounded-xl">
+Đóng
+</button>
+
+</div>
+
+</div>
+
+<!-- REGISTER MODAL -->
+
+<div id="registerModal"
+class="hidden fixed inset-0 bg-black/70 flex justify-center items-center p-4">
+
+<div class="bg-slate-900 w-full max-w-md rounded-3xl p-8">
+
+<h2 class="text-2xl font-black mb-6">
+Tạo tài khoản
+</h2>
+
+<input
+id="registerUsername"
+placeholder="Tên đăng nhập"
+class="w-full mb-4 bg-slate-800 rounded-xl p-3">
+
+<input
+id="registerEmail"
+placeholder="Email"
+class="w-full mb-4 bg-slate-800 rounded-xl p-3">
+
+<input
+id="registerPassword"
+type="password"
+placeholder="Mật khẩu"
+class="w-full mb-4 bg-slate-800 rounded-xl p-3">
+
+<button
+onclick="register()"
+class="w-full bg-green-600 py-3 rounded-xl font-bold">
+Đăng ký
+</button>
+
+<button
+onclick="closeModal()"
+class="w-full mt-3 bg-slate-700 py-3 rounded-xl">
+Đóng
+</button>
+
+</div>
+
+</div>
+
+<script>
+
+function showLogin(){
+document.getElementById("loginModal").classList.remove("hidden");
+}
+
+function showRegister(){
+document.getElementById("registerModal").classList.remove("hidden");
+}
+
+function closeModal(){
+document.getElementById("loginModal").classList.add("hidden");
+document.getElementById("registerModal").classList.add("hidden");
+}
+
+async function register(){
+
+const data = {
+username:
+document.getElementById("registerUsername").value,
+
+email:
+document.getElementById("registerEmail").value,
+
+password:
+document.getElementById("registerPassword").value
+};
+
+let res = await fetch('/auth/register',{
+method:'POST',
+headers:{
+'Content-Type':'application/json'
+},
+body:JSON.stringify(data)
+});
+
+let result = await res.json();
+
+if(res.ok){
+alert("Đăng ký thành công");
+closeModal();
+}else{
+alert(result.detail);
+}
+}
+
+async function login(){
+
+const data = {
+username:
+document.getElementById("loginUsername").value,
+
+password:
+document.getElementById("loginPassword").value
+};
+
+let res = await fetch('/auth/login',{
+method:'POST',
+headers:{
+'Content-Type':'application/json'
+},
+body:JSON.stringify(data)
+});
+
+let result = await res.json();
+
+if(res.ok){
+
+localStorage.setItem(
+"token",
+result.access_token
+);
+
+alert("Đăng nhập thành công");
+
+window.location="/dashboard";
+
+}else{
+alert(result.detail);
+}
+}
+
+</script>
+
+</body>
+</html>
+"""
