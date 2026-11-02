@@ -2,6 +2,7 @@ import os
 import sqlite3
 import csv
 import io
+import json
 import hashlib
 from datetime import datetime
 import numpy as np
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 from sklearn.datasets import load_iris
 from sklearn.svm import SVC
 
-app = FastAPI(title="Iris Botanica — Personal Studio", version="23.0")
+app = FastAPI(title="Iris Botanica — Personal Studio", version="23.1")
 
 DB_FILE = "iris_system.db"
 
@@ -225,23 +226,24 @@ async def analyze_file(file: UploadFile = File(...)):
     filename = file.filename.lower()
     contents = await file.read()
     try:
+        # Xử lý file Ảnh
         if filename.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
-            # Xử lý ảnh bằng Pillow & NumPy để phân tích màu sắc và trích xuất đặc trưng hình thái hoa
             image = Image.open(io.BytesIO(contents)).convert("RGB").resize((120, 120))
             img_arr = np.array(image)
             
             r_mean, g_mean, b_mean = img_arr[:,:,0].mean(), img_arr[:,:,1].mean(), img_arr[:,:,2].mean()
+            brightness = (r_mean + g_mean + b_mean) / 3.0
             color_sum = r_mean + g_mean + b_mean + 1e-5
             r_ratio = r_mean / color_sum
             b_ratio = b_mean / color_sum
             
-            # Ưu việt hóa heuristic phân loại hoa dựa trên sắc tố màu và tỷ lệ cánh
-            if b_ratio > 0.36:
-                sepal_l, sepal_w, petal_l, petal_w = 6.4, 2.9, 5.6, 2.1
-            elif r_ratio > 0.34:
-                sepal_l, sepal_w, petal_l, petal_w = 5.0, 3.4, 1.5, 0.3
+            # Phân loại dựa trên phổ màu & độ sáng
+            if b_ratio > 0.35 and brightness < 110:
+                sepal_l, sepal_w, petal_l, petal_w = 6.5, 3.0, 5.8, 2.2  # Virginica
+            elif r_ratio > 0.33 or brightness > 130:
+                sepal_l, sepal_w, petal_l, petal_w = 5.1, 3.5, 1.4, 0.2  # Setosa
             else:
-                sepal_l, sepal_w, petal_l, petal_w = 5.9, 3.0, 4.3, 1.4
+                sepal_l, sepal_w, petal_l, petal_w = 6.0, 2.9, 4.5, 1.5  # Versicolor
 
             metrics = {
                 "sepal_length": round(float(sepal_l), 1),
@@ -253,16 +255,17 @@ async def analyze_file(file: UploadFile = File(...)):
             res = predict_iris(IrisInput(**metrics, username="guest"))
             return {
                 "status": "SUCCESS",
-                "message": "Phân tích ảnh hoàn tất dựa trên đặc trưng hình thái & sắc tố!",
+                "message": "Phân tích ảnh hoàn tất!",
                 "extracted_metrics": metrics,
                 "prediction_result": res
             }
 
-        # CSV / JSON
+        # Xử lý file JSON hoặc CSV
         text = contents.decode("utf-8", errors="ignore")
         if filename.endswith(".json"):
-            import json
-            data = json.loads(text)
+            parsed_data = json.loads(text)
+            # Hỗ trợ cả JSON object đơn lẻ lẫn JSON dạng list
+            data = parsed_data[0] if isinstance(parsed_data, list) and len(parsed_data) > 0 else parsed_data
             metrics = {
                 "sepal_length": float(data.get("sepal_length", data.get("sepalLength", 5.1))),
                 "sepal_width": float(data.get("sepal_width", data.get("sepalWidth", 3.5))),
@@ -270,21 +273,33 @@ async def analyze_file(file: UploadFile = File(...)):
                 "petal_width": float(data.get("petal_width", data.get("petalWidth", 0.2))),
                 "kernel": data.get("kernel", "rbf")
             }
-        else:
+        else:  # CSV
             lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
-            if len(lines) >= 2:
+            if not lines:
+                raise ValueError("File CSV trống!")
+            
+            # Kiểm tra xem dòng đầu tiên có phải là chữ (header) hay số trực tiếp
+            first_row = lines[0].split(",")
+            try:
+                float(first_row[0])
+                # Không có header, dòng đầu là data luôn
+                vals = first_row
+            except ValueError:
+                # Có header, lấy dòng thứ 2
+                if len(lines) < 2:
+                    raise ValueError("CSV thiếu dòng dữ liệu")
                 vals = lines[1].split(",")
-                metrics = {
-                    "sepal_length": float(vals[0]),
-                    "sepal_width": float(vals[1]),
-                    "petal_length": float(vals[2]),
-                    "petal_width": float(vals[3]),
-                    "kernel": "rbf"
-                }
-            else:
-                raise ValueError("CSV không đúng định dạng")
+
+            metrics = {
+                "sepal_length": float(vals[0]),
+                "sepal_width": float(vals[1]),
+                "petal_length": float(vals[2]),
+                "petal_width": float(vals[3]),
+                "kernel": "rbf"
+            }
+
         res = predict_iris(IrisInput(**metrics, username="guest"))
-        return {"status": "SUCCESS", "extracted_metrics": metrics, "prediction_result": res}
+        return {"status": "SUCCESS", "message": "Đọc file thành công!", "extracted_metrics": metrics, "prediction_result": res}
     except Exception as e:
         return {"status": "ERROR", "message": str(e)}
 
@@ -1079,7 +1094,7 @@ def get_dashboard():
     if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
-    document.getElementById('uploadStatusText').innerText = 'Đang xử lý ảnh & trích xuất đặc trưng...';
+    document.getElementById('uploadStatusText').innerText = 'Đang xử lý file & trích xuất dữ liệu...';
     const res = await fetch('/analyze-file', { method: 'POST', body: formData });
     const data = await res.json();
     if (data.status === 'SUCCESS') {
