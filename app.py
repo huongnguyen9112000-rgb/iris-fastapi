@@ -1081,7 +1081,7 @@ def get_dashboard():
     });
   }
 
-  export function exportData(fmt) {
+  function exportData(fmt) {
     const q = `?username=${encodeURIComponent(currentUser)}`;
     window.open(`/export/${fmt}${q}`, '_blank');
   }
