@@ -497,3 +497,33 @@ def my_predictions(
         }
         for r in data
     ]
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Iris AI Analytics Platform</title>
+    </head>
+
+    <body style="
+        font-family:Arial;
+        text-align:center;
+        padding:100px;
+        background:#f8fafc;
+    ">
+
+        <h1>Iris AI Analytics Platform</h1>
+
+        <p>Backend đang hoạt động thành công ✅</p>
+
+        <a href="/docs">
+            Swagger API
+        </a>
+
+    </body>
+    </html>
+    """
